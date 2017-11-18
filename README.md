@@ -17,5 +17,10 @@ git add remote origin git://github.com/<your_github_user_name>/big_data.git
 ```
 git add <file_name_to_add>
 git commit -m "my message - place to explain my change"
-git push origin development
+git push origin master
+```
+## updating your local repo with other's changes
+6. every time you want to align with the recent changes, run the following command
+```
+git pull upstream master
 ```
