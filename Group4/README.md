@@ -1,4 +1,5 @@
-group names:
-Rotem Zaarour
-Dor Heldshtein
-Lior Rosen
+###### Team naming list
+
+- Rotem Zaarour
+- Dor Heldshtein
+- Lior Rosen
