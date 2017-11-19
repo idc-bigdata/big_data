@@ -22,16 +22,18 @@ git clone https://github.com/<your_github_user_name>/big_data.git
 git add remote upstream git://github.com/idc-bigdata/big_data.git
 git add remote origin git://github.com/<your_github_user_name>/big_data.git
 ```
+###### updating your local repo with other's changes
+5. every time you want to align with the recent changes, run the following command
+```
+git pull upstream master
+git push origin master
+```
+
 ###### you now have a local copy of origin (your forked project)
-5. once you're done with your file changes (add/remove content), you should perform the following 
+6. once you're done with your file changes (add/remove content), you should perform the following 
 ```
 git add <file_name_to_add>
 git commit -m "my message - place to explain my change"
 git push origin master
 ```
-###### updating your local repo with other's changes
-6. every time you want to align with the recent changes, run the following command
-```
-git pull upstream master
-git push origin master
-```
+
