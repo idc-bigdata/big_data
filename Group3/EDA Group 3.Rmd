@@ -1,0 +1,111 @@
+---
+output:
+  html_document: default
+  html_notebook: default
+---
+# EDA Stock Group</br>
+*Eyal Gat, Ori Dahari, Mor Anavi*
+
+## CodeBook
+A Codebook is a technical description of the data that was collected for this project. It describes the business question, structure of the data, details about the data and the variables.
+
+Open the Codebook_Stocks_Group3.pdf file from this link - https://github.com/idc-bigdata/big_data/tree/master/Group3
+ 
+### Preparation the data
+
+#### 1) Read the data 
+
+The data available on GitHub
+https://github.com/idc-bigdata/big_data/tree/master/Group3
+
+Download the csv file from the link above, to your local folder, and then read it to a data frame in R Studio, as below.
+
+```{r}
+df <- read.csv('/Users/eyalgat/Desktop/data scients/DataSets/TVIX_06121000.csv') # Change this path to your downloaded file
+```
+
+After reading the file in R Studio, you can view it by clicking on the df in the Environment section, or with the view function. 
+
+Change the date colum to date class
+
+```{r}
+df$Date = as.Date(df$Date, format = "%d/%m/%Y")
+```
+
+#### 2) Split the data to train and test
+Below is a code that scrumbles the data and then select 75% of the data as train and 25% as test.
+
+
+```{r}
+set.seed(124)
+train <- floor((nrow(df)/4)*3)
+d <- df[sample(nrow(df)), ]
+df.train <- d[1:train, ]
+df.test <- d[(train+1):nrow(df), ]
+```
+
+
+### Explore each predictor
+
+#### 1) Visualize each variable histogram on one page
+We use histogram to visualize each variable separately to understand the values distribution.</br>
+Below are 6 histograms on a page, arranged with the par function.
+```{r}
+par(mfrow = c(2,3) ); 
+hist(df.train$Change, main = "Change", border = "blue", col = "light blue", breaks = 10, xlab = NA, ylab = NA) 
+hist(df.train$Volume, main = "Volume", border = "blue", col = "light blue", breaks = 5, xlab = NA, ylab = NA) 
+hist(df.train$Open_Change, main = "Open Change", border = "blue", col = "light blue", breaks = 7, xlab = NA, ylab = NA) 
+hist(df.train$RSI, main = "RSI", border = "blue", col = "light blue", breaks = 20, xlab = NA, ylab = NA)
+hist(df.train$EMA, main = "EMA", border = "blue", col = "light blue", breaks = 5, xlab = NA, ylab = NA)
+hist(df.train$Change_Within, main = "Change_Within", border = "blue", col = "light blue", breaks = 7, xlab = NA, ylab = NA) 
+```
+
+## Finding connections between variables 
+
+#### 1) Correlation
+
+To calculate correlations we use the cor function.
+We create the cor table to find the relations between the variables
+
+```{r}
+df.num = df.train[c(2:15)]
+cor_table = cor(df.num, use = "complete.obs")
+```
+
+
+#### 2) Pairs - table of correlation graphs
+
+We use to find the correlations between variables with pairs function.
+Paris function is a matrix of connections in a set of numerical variables. 
+From the pairs below you can see that this data set variables are not correlated.
+
+```{r}
+pairs(df.train[c(7:14)])
+```
+
+
+#### 3) Scatter plot
+
+Correlations between variables can be investigated with a scatter plot(s).
+
+Below is a scatter plot of Change per the Next Open Change, and when the Close Price equal to High Price.
+We use tableau to create this scatter plot - [link](https://public.tableau.com/views/HighClose/HighClose?:embed=y&:display_count=yes)
+
+
+#### 4) Several variables on the same plot
+We use tableau to create some plots with several variables
+
+Order by  Volume - plot of the connection between volume to buy/sell/hold order with Nextday Change - [link](https://public.tableau.com/views/OrderbyVolumewithNextdayChange/OrderbyVolumewithNextdayClose?:embed=y&:display_count=yes&publish=yes)
+
+Change by Order -  plot of the connection between Change to buy/sell/hold Order with Nextday Change - [link](https://public.tableau.com/views/ChangebyOrderwithNextdayChange/ChangebyOrderwithNextdayChange?:embed=y&:display_count=yes&publish=yes)
+
+Change by Open Change -  plot of the connection between Change to Open Change - [link](https://public.tableau.com/views/ChangebyOpenChange/ChangebyOpenChange?:embed=y&:display_count=yes&publish=yes)
+
+Buy when High Price touch 10 days previous max High Price - plot of Close Price with Volume/Mean Volume over time - [link](https://public.tableau.com/profile/ori.dahari#!/vizhome/AAPL_4/Dashboard1)
+
+
+
+
+
+
+
