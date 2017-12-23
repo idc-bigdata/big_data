@@ -1,0 +1,545 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r}
+library(ggmap)
+library("dplyr")
+library(sqldf)
+library(ggplot2)
+library(reshape)
+library(wordcloud2)
+library(tm)
+
+```
+
+
+---
+title: "Hotels_Review_EDA_and_Regression"
+author: "Yanir, Kobi & Noa"
+date: "December 18, 2017"
+output: html_document
+---
+
+## Reading and Understanding Hotel Reviews Data
+
+The data is a Kaggle dataset including information of close to 0.5M Hotel reviews in Europe
+https://www.kaggle.com/jiashenliu/515k-hotel-reviews-data-in-europe
+
+Reading the raw data from Kaggle to df.raw
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#Change this path to download files going forward
+setwd("C:/Users/noaba/Documents/Private/IDC_MBA/R/Regression")
+
+df.raw <- read.csv("hotel_reviews.csv")
+
+```
+
+## Kaggle Raw Data Cleansing and Transformation
+
+Signals for reviewer including:
+1. Is submitted from Mobile - 0/1
+2. Is Business trip - 0/1
+3. Is the traveler traveling in Couple - 0/1
+4. Is the traveler traveling with Pet - 0/1
+5. Is the traveler Family with young children - 0/1
+6. Is the traveler Family with older children - 0/1
+7. Is the traveling Solo traveler - 0/1
+8. Is the Traveler Group - 0/1
+9. Stay duration by number of days, if missing apply mean value
+10. Hotel Country - extract from hotel address
+11. Calculate if the reviewer is resident of the hotel - 0/1
+11. Signals for strong positive and negative words (if exist in review)
+  11.i Positive: "Clean", "Location"
+  11.ii Negative: "Breakfast", "Expensive"
+12. Negative word precentage calculation from total words in review
+13. Calculate if the review is strongly positive - 1/0
+
+```{r}
+df.raw$submitted_from_mobile = ifelse(grepl("mobile",df.raw$Tags),1,0)
+df.raw$is_business_travel = ifelse(grepl("Business trip",df.raw$Tags),1,0)
+df.raw$is_couple = ifelse(grepl("Couple",df.raw$Tags),1,0)
+df.raw$with_pet = ifelse(grepl("With a pet",df.raw$Tags),1,0)
+df.raw$Family_young_children = ifelse(grepl("Family with young children",df.raw$Tags),1,0)
+df.raw$Familty_older_children = ifelse(grepl("Family with older children",df.raw$Tags),1,0)
+df.raw$solo_traveler = ifelse(grepl("Solo",df.raw$Tags),1,0)
+df.raw$group = ifelse(grepl("Group",df.raw$Tags),1,0)
+
+# Add stay duration based on tags
+df.raw$stay_duration = c(rep(0,length(df.raw$Hotel_Name)))
+df.raw$stay_duration[which(grepl("Stayed 1 night",df.raw$Tags))] <- 1
+df.raw$stay_duration[which(grepl("Stayed 2 nights",df.raw$Tags))] <- 2
+df.raw$stay_duration[which(grepl("Stayed 3 nights",df.raw$Tags))] <- 3
+df.raw$stay_duration[which(grepl("Stayed 4 nights",df.raw$Tags))] <- 4
+df.raw$stay_duration[which(grepl("Stayed 5 nights",df.raw$Tags))] <- 5
+df.raw$stay_duration[which(grepl("Stayed 6 nights",df.raw$Tags))] <- 6
+df.raw$stay_duration[which(grepl("Stayed 7 nights",df.raw$Tags))] <- 7
+df.raw$stay_duration[which(grepl("Stayed 8 nights",df.raw$Tags))] <- 8
+df.raw$stay_duration[which(grepl("Stayed 9 nights",df.raw$Tags))] <- 9
+df.raw$stay_duration[which(grepl("Stayed 10 nights",df.raw$Tags))] <- 10
+df.raw$stay_duration[which(grepl("Stayed 11 nights",df.raw$Tags))] <- 11
+df.raw$stay_duration[which(grepl("Stayed 12 nights",df.raw$Tags))] <- 12
+df.raw$stay_duration[which(grepl("Stayed 13 nights",df.raw$Tags))] <- 13
+df.raw$stay_duration[which(grepl("Stayed 14 nights",df.raw$Tags))] <- 14
+df.raw$stay_duration[which(grepl("Stayed 15 nights",df.raw$Tags))] <- 15
+df.raw$stay_duration[which(grepl("Stayed 16 nights",df.raw$Tags))] <- 16
+df.raw$stay_duration[which(grepl("Stayed 17 nights",df.raw$Tags))] <- 17
+df.raw$stay_duration[which(grepl("Stayed 18 nights",df.raw$Tags))] <- 18
+df.raw$stay_duration[which(grepl("Stayed 19 nights",df.raw$Tags))] <- 19
+df.raw$stay_duration[which(grepl("Stayed 20 nights",df.raw$Tags))] <- 20
+df.raw$stay_duration[which(grepl("Stayed 21 nights",df.raw$Tags))] <- 21
+df.raw$stay_duration[which(grepl("Stayed 22 nights",df.raw$Tags))] <- 22
+df.raw$stay_duration[which(grepl("Stayed 23 nights",df.raw$Tags))] <- 23
+df.raw$stay_duration[which(grepl("Stayed 24 nights",df.raw$Tags))] <- 24
+df.raw$stay_duration[which(grepl("Stayed 25 nights",df.raw$Tags))] <- 25
+df.raw$stay_duration[which(grepl("Stayed 26 nights",df.raw$Tags))] <- 26
+df.raw$stay_duration[which(grepl("Stayed 27 nights",df.raw$Tags))] <- 27
+df.raw$stay_duration[which(grepl("Stayed 28 nights",df.raw$Tags))] <- 28
+df.raw$stay_duration[which(grepl("Stayed 29 nights",df.raw$Tags))] <- 29
+df.raw$stay_duration[which(grepl("Stayed 30 nights",df.raw$Tags))] <- 30
+df.raw$stay_duration[which(grepl("Stayed 31 nights",df.raw$Tags))] <- 31
+
+#applying avg nights stays where the value is missing
+df.raw$stay_duration[which(df.raw$stay_duration == 0)] <- round(mean(df.raw$stay_duration))
+
+# Setting the hotel Country from Address - to find later if stays were resident and different messurements for predictions
+df.raw$Hotel_country = c(rep("", length(df.raw$Hotel_Name)))
+df.raw$Hotel_country[which(grepl("United Kingdom",df.raw$Hotel_Address))] <- " United Kingdom "
+df.raw$Hotel_country[which(grepl("France",df.raw$Hotel_Address))] <- " France "
+df.raw$Hotel_country[which(grepl("Austria",df.raw$Hotel_Address))] <- " Austria "
+df.raw$Hotel_country[which(grepl("Spain",df.raw$Hotel_Address))] <- " Spain "
+df.raw$Hotel_country[which(grepl("Netherland",df.raw$Hotel_Address))] <- " Netherland "
+df.raw$Hotel_country[which(grepl("Italy",df.raw$Hotel_Address))] <- " Italy "
+                         
+df.raw$Reviewer_Nationality <- as.character(df.raw$Reviewer_Nationality)
+
+# Will set resident signal 1 when the nationality of reviewer similar to the Hotel Country
+df.raw$is_resident = c(rep(0,length(df.raw$Hotel_Name)))
+df.raw$is_resident[which(df.raw$Hotel_country == df.raw$Reviewer_Nationality)] <- 1
+
+df.raw$Negative_Review <- tolower(df.raw$Negative_Review)
+df.raw$Positive_Review <- tolower(df.raw$Positive_Review)
+
+# Picking on strong features from the data 
+df.raw$Complain_Breakfast <- ifelse(grepl("breakfast",df.raw$Negative_Review),1,0)
+df.raw$Complain_Price <- ifelse(grepl("expensive",df.raw$Negative_Review),1,0)
+
+df.raw$Positive_Clean <- ifelse(grepl("clean",df.raw$Positive_Review),1,0)
+df.raw$Positive_Location <- ifelse(grepl("location",df.raw$Positive_Review),1,0)
+
+# Calculate negative words precentage from overall number of words in review
+df.raw$Negative_Words_pct <- df.raw$Review_Total_Negative_Word_Counts/(df.raw$Review_Total_Negative_Word_Counts+df.raw$Review_Total_Positive_Word_Counts)
+# Correct values where positive review is missing (to avoide NA)
+df.raw$Negative_Words_pct[which(is.na(df.raw$Negative_Words_pct))] <- ifelse(df.raw$Review_Total_Negative_Word_Counts[which(is.na(df.raw$Negative_Words_pct))]>2,1,0)
+
+
+# Calculate if the review is strongly positive
+df.raw$is_positive <- df.raw$Reviewer_Score > 8.5
+
+df.raw$Review_Date <- as.Date(as.character(df.raw$Review_Date),"%m/%d/%Y")
+
+
+```
+
+
+The data presented is a multi_dimentional combination of data gatherd from Booking.com (through Kaggle), different location based 
+information (gathered through Google Maps APIs and Yelp APIs), with the help of extrapulation methods from Review Tags
+
+```{r show raw dataframe}
+str(df.raw)
+```
+
+Will check if there are any missing values that might interefere us, clean up of data
+```{r}
+colSums(is.na(df.raw))
+
+#we will remove the entries which has NA in Lat/Lng
+df.raw <- df.raw[-which(is.na(df.raw$lat)),] 
+
+df.raw$Hotel_Name <- as.character(df.raw$Hotel_Name)
+
+# There are few hotels sharing the same name - will drop them to avoid confusion
+df.raw <- df.raw[-which(df.raw$Hotel_Name == "Hotel Regina"),] 
+
+```
+
+## Hotels Dataset & Aggregations
+
+Generating Hotels data set including specific Hotels data (unique lists of hotels charactaristics and aggregations). 
+Signals , aggregation including:
+1-5. Original Hotel Name, Country, lat/lng, Avrage Score
+6. Total Reviews recorded in Kaggle dataset (for the further precentage and measurements)
+7. Total stay duration in the hotel
+8. Precentage of Hotel Business travelers from reviews
+9. Precentage of Hotel Couple travelers from reviews
+10. Precentage of Hotel travelers with pets from reviews
+11. Precentage of Hotel Family with young children from reviews
+12. Precentage of Hotel Family with older children from reviews
+13. Precentage of Hotel Solo travelers from reviews
+14. Precentage of Hotel country resident travelers from reviews
+15. Overall positive word count - negative word cound from the hotel review texts
+16. Precentage signals for strong positive and negative words (if exist in review)
+  16-17.i Positive: "Clean", "Location"
+  18-19.ii Negative: "Breakfast", "Expensive"
+20. Avg. stay duration in the hotel
+
+
+```{r}
+
+df.hotels <- data.frame(df.raw$Hotel_Name, df.raw$Hotel_country, df.raw$lat, df.raw$lng, df.raw$Average_Score)
+
+colnames(df.hotels) = c('Name','Country','lat','lng', 'Average_Score')
+
+df.hotels <- unique(df.hotels)
+
+# Calculate Real number of reviews we have in the data set
+agg_stay <- aggregate(df.raw$is_resident ~ df.raw$Hotel_Name, data = df.raw, length)
+colnames(agg_stay) = c('Name','Num_of_Reviews')
+df.hotels <- merge(df.hotels,agg_stay, by ='Name')
+
+# Total duration stayed at the hotel
+agg_stay <- aggregate(df.raw$stay_duration ~ df.raw$Hotel_Name, data = df.raw, sum)
+colnames(agg_stay) = c('Name','total_stay_duration')
+df.hotels <- merge(df.hotels,agg_stay, by ='Name')
+
+# Total Business + calculation fo precentage of stays
+agg_stay <- aggregate(df.raw$is_business_travel ~ df.raw$Hotel_Name, data = df.raw, sum)
+colnames(agg_stay) = c('Name','business_trips')
+df.hotels <- merge(df.hotels,agg_stay, by ='Name')
+
+df.hotels$business_trips <- df.hotels$business_trips/df.hotels$Num_of_Reviews
+
+# Total couple stays + calculation fo precentage of stays
+agg_stay <- aggregate(df.raw$is_couple ~ df.raw$Hotel_Name, data = df.raw, sum)
+colnames(agg_stay) = c('Name','couples_stay')
+df.hotels <- merge(df.hotels,agg_stay, by ='Name')
+
+df.hotels$couples_stay <- df.hotels$couples_stay/df.hotels$Num_of_Reviews
+
+# Total pet stays + calculation fo precentage of stays
+agg_stay <- aggregate(df.raw$with_pet ~ df.raw$Hotel_Name, data = df.raw, sum)
+colnames(agg_stay) = c('Name','pet_stay')
+df.hotels <- merge(df.hotels,agg_stay, by ='Name')
+
+df.hotels$pet_stay <- df.hotels$pet_stay/df.hotels$Num_of_Reviews
+
+# Total Family with older Children stays + calculation fo precentage of stays
+agg_stay <- aggregate(df.raw$Familty_older_children ~ df.raw$Hotel_Name, data = df.raw, sum)
+colnames(agg_stay) = c('Name','family_with_older_stays')
+df.hotels <- merge(df.hotels,agg_stay, by ='Name')
+
+df.hotels$family_with_older_stays <- df.hotels$family_with_older_stays/df.hotels$Num_of_Reviews
+
+# Total Family with young Children stays + calculation fo precentage of stays
+agg_stay <- aggregate(df.raw$Family_young_children ~ df.raw$Hotel_Name, data = df.raw, sum)
+colnames(agg_stay) = c('Name','family_with_younger_stays')
+df.hotels <- merge(df.hotels,agg_stay, by ='Name')
+
+df.hotels$family_with_younger_stays <- df.hotels$family_with_younger_stays/df.hotels$Num_of_Reviews
+
+# Total Solo Traveler stays + calculation fo precentage of stays
+agg_stay <- aggregate(df.raw$solo_traveler ~ df.raw$Hotel_Name, data = df.raw, sum)
+colnames(agg_stay) = c('Name','solo_stays')
+df.hotels <- merge(df.hotels,agg_stay, by ='Name')
+
+df.hotels$solo_stays <- df.hotels$solo_stays/df.hotels$Num_of_Reviews
+
+# Total Group Travel stays + calculation fo precentage of stays
+agg_stay <- aggregate(df.raw$group ~ df.raw$Hotel_Name, data = df.raw, sum)
+colnames(agg_stay) = c('Name','group_stays')
+df.hotels <- merge(df.hotels,agg_stay, by ='Name')
+
+df.hotels$group_stays <- df.hotels$group_stays/df.hotels$Num_of_Reviews
+
+# Total resident Travel stays + calculation fo precentage of stays
+agg_stay <- aggregate(df.raw$is_resident ~ df.raw$Hotel_Name, data = df.raw, sum)
+colnames(agg_stay) = c('Name','resident_stays')
+df.hotels <- merge(df.hotels,agg_stay, by ='Name')
+
+df.hotels$resident_stays <- df.hotels$resident_stays/df.hotels$Num_of_Reviews
+
+# Total Positive - Negative word count
+agg_stay <- aggregate((df.raw$Review_Total_Positive_Word_Counts - df.raw$Review_Total_Negative_Word_Counts) ~ df.raw$Hotel_Name, data = df.raw, sum)
+colnames(agg_stay) = c('Name','positive_minus_negative_word_count')
+df.hotels <- merge(df.hotels,agg_stay, by ='Name')
+
+
+# Total #reviews complaining on the breakfast  + calculation fo precentage of stays
+agg_stay <- aggregate(df.raw$Complain_Breakfast ~ df.raw$Hotel_Name, data = df.raw, sum)
+colnames(agg_stay) = c('Name','Complains_Breakfast')
+df.hotels <- merge(df.hotels,agg_stay, by ='Name')
+
+df.hotels$Complains_Breakfast <- df.hotels$Complains_Breakfast/df.hotels$Num_of_Reviews
+
+# Total #reviews complaining on the price  + calculation fo precentage of stays
+agg_stay <- aggregate(df.raw$Complain_Price ~ df.raw$Hotel_Name, data = df.raw, sum)
+colnames(agg_stay) = c('Name','Complains_Price')
+df.hotels <- merge(df.hotels,agg_stay, by ='Name')
+
+df.hotels$Complains_Price <- df.hotels$Complains_Price/df.hotels$Num_of_Reviews
+
+# Total #positive reviews mentioning room is clean  + calculation fo precentage of stays
+agg_stay <- aggregate(df.raw$Positive_Clean ~ df.raw$Hotel_Name, data = df.raw, sum)
+colnames(agg_stay) = c('Name','Positives_Clean')
+df.hotels <- merge(df.hotels,agg_stay, by ='Name')
+
+df.hotels$Positives_Clean <- df.hotels$Positives_Clean/df.hotels$Num_of_Reviews
+
+# Total #positive reviews mentioning location  + calculation fo precentage of stays
+agg_stay <- aggregate(df.raw$Positive_Location ~ df.raw$Hotel_Name, data = df.raw, sum)
+colnames(agg_stay) = c('Name','Positives_Location')
+df.hotels <- merge(df.hotels,agg_stay, by ='Name')
+
+df.hotels$Positives_Location <- df.hotels$Positives_Location/df.hotels$Num_of_Reviews
+
+df.hotels$Avg_Stay_Duration <- df.hotels$total_stay_duration / df.hotels$Num_of_Reviews
+
+summary(df.hotels)
+```
+
+Merging to the Hotels table different set of data we aquired from Yelp, to indicate number of businesses in 100M, 1KM & 5KM
+
+```{r}
+
+df.enrich.raw <- read.csv("hotel_reviews_enriched.csv")
+
+#we will remove the entries which has NA in Lat/Lng
+df.enrich.raw <- df.enrich.raw[-which(is.na(df.enrich.raw$Hotel_lat)),] 
+
+df.enrich.raw$Hotel_Name <- as.character(df.enrich.raw$Hotel_Name)
+
+# There are few hotels sharing the same name - will drop them to avoid confusion
+df.enrich.raw <- df.enrich.raw[-which(df.enrich.raw$Hotel_Name == "Hotel Regina"),] 
+
+
+df.yelp <- data.frame(df.enrich.raw$Hotel_Name, df.enrich.raw$Businesses_100m,df.enrich.raw$Businesses_1km, df.enrich.raw$Businesses_5km)
+
+df.yelp <- unique(df.yelp)
+
+colnames(df.yelp) = c('Name','Businesses_100m','Businesses_1km','Businesses_5km')
+
+df.hotels <- merge(df.hotels,df.yelp, by ='Name')
+
+
+#Write back the aggregated data collected and calculated
+write.csv(df.hotels, file="Hotels_Review_Aggregated.csv", quote=FALSE, na="NA", row.names=FALSE)
+write.csv(df.raw.trasformed, file = "Hotels_Review_Aggregated.csv", quote=FALSE, na="NA", row.names=FALSE)
+
+
+```
+
+## Ploting the Data
+Calculating and goruping avrage hotel rating by country
+```{r}
+
+df.hotels %>% 
+  select(Average_Score, Country) %>% 
+  group_by(Country) %>%   
+  summarise(trav_type_avg = mean(Average_Score)) %>% 
+  ggplot(aes(x = reorder(Country, -trav_type_avg), trav_type_avg , fill = Country)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Average rating by Country") +
+  xlab("Country") + ylab("Average rating") +scale_fill_grey(start = 0.1, end = 0.6, na.value = "red")
+  
+
+# Can also check which country is more mobile oriented (reviewer nationality, is mobile)
+```
+Plotting the precentage of stays by travel types by country
+
+```{r}
+
+  df.hotels_full <- df.hotels
+
+for (i in 8:15) {
+  df.hotels_full[,i] <- df.hotels_full[,i]* df.hotels_full[,6]
+}
+  
+w2l <- function(df.hotels_full) melt(df.hotels_full, measure.vars = colnames(df.hotels_full)[8:15])
+mdfr_linear <- w2l(df.hotels_full)
+
+ggplot(mdfr_linear, aes(x= mdfr_linear$Country, y = mdfr_linear$value, fill = variable)) +
+geom_bar(position = "stack", stat = "identity") +
+   coord_flip() + xlab("") + ylab("Number of Reviews") +
+    scale_fill_brewer(type = "div") + theme(legend.position = "top")
+
+```
+
+Plotting the avg. review score , grouped by the different traveler type to visualize the type of travelers most positive and negative trends
+
+
+```{r}
+travel_avg_score <- data.frame(c("Couple", "Group", "Solo Traveler", "With Pet", "Family with older children", "Family with young children"))
+
+colnames(travel_avg_score) = c('Traveler_Type')
+
+travel_avg_score$Avg_Review_Score = c(mean(df.raw$Reviewer_Score[which(df.raw$is_couple == 1)]), +
+                                        mean(df.raw$Reviewer_Score[which(df.raw$group == 1)]), +
+                                        mean(df.raw$Reviewer_Score[which(df.raw$solo_traveler == 1)]), +
+                                        mean(df.raw$Reviewer_Score[which(df.raw$with_pet == 1)]), +
+                                        mean(df.raw$Reviewer_Score[which(df.raw$Familty_older_children == 1)]), mean(df.raw$Reviewer_Score[which(df.raw$Family_young_children == 1)]))
+
+  ggplot(travel_avg_score, aes(x= reorder(Traveler_Type,Avg_Review_Score), y = Avg_Review_Score, fill = Traveler_Type)) +
+   geom_bar(position = "stack", stat = "identity") +
+   coord_flip() +
+   xlab("") +
+   ylab("Avg. Review Score") +
+    scale_fill_brewer(type = "div") 
+
+
+
+```
+
+Plotting the number of reviews by the day of the week, as well as the avg. score by the day of the week
+
+```{r}
+day_of_the_week = c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday","Friday", "Saturday")
+
+df_day_score <- data.frame(day_of_the_week)
+df_day_score$Avg_Score <- c(mean(df.enrich.raw$Reviewer_Score[which(df.enrich.raw$Day_of_Week == 1)]),
+                            mean(df.enrich.raw$Reviewer_Score[which(df.enrich.raw$Day_of_Week == 2)]),
+                            mean(df.enrich.raw$Reviewer_Score[which(df.enrich.raw$Day_of_Week == 3)]),
+                            mean(df.enrich.raw$Reviewer_Score[which(df.enrich.raw$Day_of_Week == 4)]),
+                            mean(df.enrich.raw$Reviewer_Score[which(df.enrich.raw$Day_of_Week == 5)]),
+                            mean(df.enrich.raw$Reviewer_Score[which(df.enrich.raw$Day_of_Week == 6)]),
+                            mean(df.enrich.raw$Reviewer_Score[which(df.enrich.raw$Day_of_Week == 7)]))
+
+df_day_score$number_of_reviews <- c(length(which(df.enrich.raw$Day_of_Week == 1)),
+                                    length(which(df.enrich.raw$Day_of_Week == 2)),
+                                    length(which(df.enrich.raw$Day_of_Week == 3)),
+                                    length(which(df.enrich.raw$Day_of_Week == 4)),
+                                    length(which(df.enrich.raw$Day_of_Week == 5)),
+                                    length(which(df.enrich.raw$Day_of_Week == 6)),
+                                    length(which(df.enrich.raw$Day_of_Week == 7)))
+
+  ggplot(df_day_score, aes(x= day_of_the_week, y = number_of_reviews, fill = day_of_the_week)) +
+   geom_bar(position = "stack", stat = "identity") +
+   xlab("") +
+   ylab("Number of Reviews") +
+    scale_fill_brewer(type = "div", palette = "Yellows") +
+        theme(legend.position = "bottom")
+```
+
+
+
+```{r}
+  ggplot(df_day_score, aes(x= reorder(day_of_the_week, Avg_Score), y = Avg_Score, fill = day_of_the_week)) +
+   geom_bar(position = "stack", stat = "identity") +
+       coord_flip() +
+   xlab("") +
+   ylab("Avg. Review Score") +
+    scale_fill_brewer(type = "div", palette = "Purples")+
+    theme(legend.position = "bottom")
+  
+
+```
+
+Showing trend of reviews by Mobile and PC over time - 
+Aggregating the data by months, and visualizing over graph chart
+
+```{r}
+mo_yr <- format(df.raw$Review_Date,"1-%B-%Y")
+mo_yr <- as.Date(as.character(mo_yr),"%d-%B-%Y")
+
+Mobile_vs_PC.agg <- aggregate(df.raw$submitted_from_mobile ~ mo_yr, df.raw, FUN = sum)
+PC_vs_Mobile.agg <- aggregate(1-df.raw$submitted_from_mobile ~ mo_yr, df.raw, FUN = sum)
+
+colnames(Mobile_vs_PC.agg) = c('Date','Reviews_through_mobile')
+colnames(PC_vs_Mobile.agg) = c('Date','Reviews_through_PC')
+
+Mobile_vs_PC.agg <- merge(Mobile_vs_PC.agg,PC_vs_Mobile.agg, by ='Date')[1:24,]
+
+meltf2 <- function(Mobile_vs_PC.agg) melt(Mobile_vs_PC.agg, measure.vars = colnames(Mobile_vs_PC.agg)[2:3])
+PC_vs_Mobile.agg <- meltf2(Mobile_vs_PC.agg)
+
+ggplot(PC_vs_Mobile.agg, aes(x=PC_vs_Mobile.agg$Date, y=value))+
+geom_line() + geom_point() + aes(color=variable) + xlab("Date") + ylab("Num. of Reviews") + theme(legend.position = "bottom")
+```
+
+We will try to understand if there is any relationship from media (Mobile / non-Mobile) to number of words in review.
+
+1. Relationship between total words used (Positive + Negative) to the media used (Mobile / PC)
+
+```{r}
+ggplot(df.raw, aes(x=(df.raw$Review_Total_Negative_Word_Counts+df.raw$Review_Total_Positive_Word_Counts),y=df.raw$submitted_from_mobile))+ geom_point(size=0.3) + aes(color=df.raw$submitted_from_mobile) + geom_jitter() + ggtitle("Comperison of Total Words Used for Reviews in Mobile vs. PC")
+
+```
+
+2. Relationship between Positive word counts used to the media used (Mobile / PC)
+
+```{r}
+# Reviewers might use the same ammount of words describing negative reviews from mobile, however will use less words for positive reviews
+ggplot(df.raw, aes(x=(df.raw$Review_Total_Positive_Word_Counts),y=df.raw$submitted_from_mobile))+ geom_point(size=0.2) + aes(color=df.raw$submitted_from_mobile) + geom_jitter() + xlab("Total Positive Words in Review") + ylab("Submitted through PC; Submitted through Mobile") + ggtitle("Comperison of Total Positive Words Used for Reviews in Mobile vs. PC")
+```
+
+## Test Mining and Word Cloud
+
+Find strong words repeating in positive and negative review and compare between business traverelers reviews and general (sample) population reviews
+
+```{r}
+
+BusinessReviews <- df.raw[sample(nrow(df.raw[which(df.raw$is_business_travel==1),]), 40000), ]
+BusinessReviews <- BusinessReviews[BusinessReviews$Review_Total_Negative_Word_Counts > 2, ]
+BusinessReviews <- BusinessReviews[BusinessReviews$Review_Total_Positive_Word_Counts > 2, ]
+
+reviews <- df.raw[sample(nrow(df.raw), 40000), ]
+reviews <- reviews[reviews$Review_Total_Negative_Word_Counts > 2, ]
+reviews <- reviews[reviews$Review_Total_Positive_Word_Counts > 2, ]
+term_freq <- function(df,sent){
+  if(sent=='pos'){
+       corpus <- Corpus(VectorSource(df$Positive_Review))
+  }else{
+       corpus <- Corpus(VectorSource(df$Negative_Review))
+  }
+  corpus <- tm_map(corpus, removeWords, stopwords("SMART"))
+  corpus <- tm_map(corpus, removeWords, stopwords("en"))
+  corpus <- tm_map(corpus, stripWhitespace)
+  corpus <- tm_map(corpus, removeWords, "The")
+  dtm <-TermDocumentMatrix(corpus)
+  mat_dtm <- as.matrix(dtm)
+  v_dtm <- sort(rowSums(mat_dtm),decreasing = TRUE)
+  FreqMat <- data.frame(word = names(v_dtm), Freq = v_dtm)
+  FreqMat <- FreqMat[1:50,]
+  return(FreqMat)
+}
+
+GenFreqPos <- term_freq(reviews,'pos')
+BusFreqPos <- term_freq(BusinessReviews,'pos')
+GenFreqNeg <- term_freq(reviews,'neg')
+BusFreqNeg <- term_freq(BusinessReviews,'neg')
+
+wordcloud2(data = term_freq(reviews,'pos'),minRotation = 0,maxRotation = 0)
+```
+
+
+
+```{r}
+wordcloud2(data = term_freq(reviews,'neg'),minRotation = 0,maxRotation = 0)
+```
+
+```{r}
+reviews <- df.raw[sample(nrow(df.raw), 40000), ]
+reviews <- reviews[reviews$Review_Total_Negative_Word_Counts > 2, ]
+reviews <- reviews[reviews$Review_Total_Positive_Word_Counts > 2, ]
+wordcloud2(data = term_freq(reviews,'neg'),minRotation = 0,maxRotation = 0)
+```
+
+We will use later the comparison between GenFreqNeg list to BusFreqNeg
+As well as GenFreqPos list to the BusFrenPos list to identify stronger features fro business travels
+
+
+```{r}
+
+df.hotels$Businesses_100m <- as.numeric(df.hotels$Businesses_100m)
+df.hotels$Businesses_1km <- as.numeric(df.hotels$Businesses_1km)
+df.hotels$Businesses_5km <- as.numeric(df.hotels$Businesses_5km)
+
+hist(df.raw$Reviewer_Score, main = "Review Score Distribution", xlab = "Score 1-10", ylab = "Number of Reviews", border = "darkgreen", col = "lightblue", xlim = c(2,10), breaks = 50)
+
+hist(df.hotels$Average_Score, main = "Hotels Avg. Review Score Distribution", xlab = "Score 1-10", ylab = "Number of Hotels", border = "gold", col = "magenta", xlim = c(2,10), breaks = 50)
+
+
+```
+
