@@ -1,4 +1,4 @@
-# Group 4 - Cars 🚗
+# Group 4 - Wine 🍷
 
 ###### Team naming list
 
