@@ -1,0 +1,397 @@
+---
+title: "Wine Reviews - Data Analysis"
+author: "Rotem Zaarour & Dor Heldshtein & Lior Rosen"
+date: "January 2018"
+output:
+  html_notebook: default
+  word_document: default
+  pdf_document: default
+  html_document: default
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### 1. The data - EDA and preparing the DATA
+
+**Reading, and understanding the DATA: **
+
+>Data source:
+   https://www.kaggle.com/zynicide/wine-reviews/data
+
+```{r}
+df <- read.csv('C:/Users/Meni/Downloads/Winemag-data-130k-v2.csv') # Change this path to your downloaded file
+```
+
+Exemaining n/a:
+```{r Exemaining n/a:}
+# checking for missing data and cleaning the n/a
+print(colSums(is.na(df)))
+# as we see we have some n/a in the price so we sould clean it:
+df <- df[!is.na(df$price), ]
+```
+
+Quick glance at the data:
+```{r Quick glance at the data:}
+str(df)
+a.df = c("country","province", "region_1", "region_2", "points", "price", "designation", "variety", "winery", "taster_name")
+summary(df[,a.df])
+```
+
+Summary of unique velues:
+```{r}
+unique_vals <- sapply(df, unique)
+summary(unique_vals)
+```
+
+**adding data to the DATA**
+
+adding the wine types by red and white
+```{r}
+# the following chunk requires installation of the package dplyr
+library(dplyr)
+
+df$wine_type = ifelse(df$variety == "Chardonnay" | df$variety == "Riesling" | df$variety == "Sauvignon Blanc" | df$variety == "White Blend" | df$variety == "Sparkling Blend" | df$variety == "Pinot Gris" | df$variety == "Champagne Blend" | df$variety == "Grüner Veltliner" | df$variety == "Pinot Grigio" | df$variety == "Portuguese White" | df$variety == "Viognier" | df$variety == "Gewürztraminer" | df$variety == "Gewürztraminer", 
+                              "White Wine",
+                              "Red Wine")
+df$wine_type = as.factor(df$wine_type)  
+summary(df$wine_type)
+```
+
+adding external data ??
+
+**Lets inspect the DATA: **
+
+First we would like to analys the distribution:
+
+* the points of critic.
+* the price (only under 150 to reduce the edges).
+* the price's log.
+
+```{r}
+# the following chunk requires the installation of the package ggplot
+
+library(ggplot2)
+library(ggjoy)
+library(gridExtra)
+library(ggridges)
+
+ggplot(data = df, aes(x= points, colour = I('black'), fill = I('#099DD9')))+geom_histogram(binwidth = 1)+labs(x = "Points", y= "Frequency", title = "Wine Review - Points histogram")
+summary(df$points)
+
+ggplot(data = df[(df$price<150),], aes(x= price, colour = I('black'), fill = I('#099DD9')))+geom_histogram()+labs(x = "Price", y= "Frequency", title = "Wine Reviews - Price Histrogram")
+summary(df$price)
+ggplot(data = df, aes(x= log(price), colour = I('black'), fill = I('#099DD9')))+geom_histogram()+labs(x = "log(Price)", y= "Frequency", title = "Wine Reviews - Log(prices) Histogram")
+summary(log(df$price))
+```
+
+Now we would evaluate the differences between:
+
+* Top 20 wine types.
+* Red and White wines.
+
+Top 20 types of wine
+```{r}
+top_20_wines <- df %>%
+  group_by(variety) %>%
+  summarise(count = n())%>%
+  arrange(desc(count))
+
+top_20_wines <- top_20_wines[1:20,1:2]
+
+top_20_wines
+top_20_wines <- top_20_wines$variety  
+top_20.df <- subset(df, variety %in% top_20_wines)
+```
+
+```{r}
+top_20.df[(top_20.df$price <= 100 & top_20.df$price >0),] %>%
+  group_by(variety, wine_type) %>%
+  summarise(n=n(),
+            avg_score = mean(points),
+            avg_price = mean(price)) %>%
+  ggplot(aes(x=avg_price, y= avg_score, size = n, colour = wine_type))+
+  geom_point()+
+  scale_color_manual(values = c("#990000", "#FFFF66"))
+
+```
+
+
+
+```{r}
+p1 <- ggplot(data = subset(top_20.df, wine_type == "Red Wine"), aes(x=points, y=variety))+
+  geom_density_ridges2(bandwidth = 0.539, fill = "#990000")
+
+p2 <- ggplot(data = subset(top_20.df, wine_type == "White Wine"), aes(x=points, y=variety))+
+  geom_density_ridges2(bandwidth = 0.539, fill = "#FFFF66")
+
+grid.arrange(p1, p2, nrow = 1)
+```
+
+```{r}
+p3 <- ggplot(data = subset(top_20.df, wine_type == "Red Wine"), aes(x=log(price), y=variety))+
+  geom_joy2(bandwidth = 0.103, fill = "#990000")
+
+p4 <- ggplot(data = subset(top_20.df, wine_type == "White Wine"), aes(x=log(price), y=variety))+
+  geom_joy2(bandwidth = 0.103, fill = "#FFFF66")
+
+grid.arrange(p3, p4, nrow=1)
+```
+
+```{r}
+# the following requires installation of gridExtra package
+p5 <- ggplot(data = subset(top_20.df, wine_type == "Red Wine"), aes(x=points, y= price))+
+  geom_point(colour="#990000")+
+  scale_y_log10()+
+  geom_smooth()
+
+p6 <- ggplot(data = subset(top_20.df, wine_type == "White Wine"), aes(x=points, y= price))+
+  geom_point(colour="#FFFF66")+
+  scale_y_log10()+
+  geom_smooth()
+
+
+cor(log(top_20.df$price), top_20.df$points)
+
+grid.arrange(p5, p6, nrow=1)
+```
+
+### 2. Analysing the data - predicting regression
+
+**filter and split to train and test, as learned before:**
+
+```{r}
+
+set.seed(7) # Split to train 80% and test 20%
+bound <- floor((nrow(df)/5)*4)
+d <- df[sample(nrow(df)), ]
+df.train <- d[1:bound, ]
+df.test <- d[(bound+1):nrow(df), ]
+
+```
+
+**prepearing the DATA:
+```{r prepering the DATA:}
+clean_train = data.frame(points = df.train$points,
+                     price = log(df.train$price),
+                     desc_nc = nchar(as.character(df.train$description)),
+                     desc_nw = (lengths(gregexpr(" ", df.train$description))+1),
+                     title_nc = nchar(as.character(df.train$title)),
+                     cntry_code = as.numeric(df.train$country))
+#summary(clean_train)
+
+##adding the country grade
+
+cntry_grd = data.frame(points = clean_train$points,
+                       cntry_code = clean_train$cntry_code)
+cntry_grd
+
+clean_test = data.frame(points = df.test$points,
+                     price = log(df.test$price),
+                     desc_nc = nchar(as.character(df.test$description)),
+                     desc_nw = (lengths(gregexpr(" ", df.test$description))+1),
+                     title_nc = nchar(as.character(df.test$title)),
+                     cntry_code = as.numeric(df.test$country))
+#summary(clean_train)
+
+##adding the country grade
+
+cntry_grd = data.frame(points = clean_train$points,
+                       cntry_code = clean_train$cntry_code)
+cntry_grd
+
+cntry_grd_test = data.frame(points = clean_test$points,
+                       cntry_code = clean_test$cntry_code)
+cntry_grd_test
+
+```
+
+
+```{r}
+# Regression Models
+# Linear Regression
+
+Price_points_reg1 <- lm(log(price) ~ points, data = new_data)
+summary(Price_points_reg1)
+
+par(mfrow = c(2,2))
+plot(Price_points_reg1)
+
+Price_points_reg2 <- lm(log(price) ~ points + wine_type, data = new_data)
+summary(Price_points_reg2)
+
+par(mfrow = c(2,2))
+plot(Price_points_reg2)
+
+
+Price_points_reg3 <- lm(log(price) ~ points^2 + points + wine_type, data = new_data)
+summary(Price_points_reg3)
+
+par(mfrow = c(2,2))
+plot(Price_points_reg3)
+```
+
+```{r}
+# Applying the Regression Model on the Test Data
+
+
+
+```
+
+### Tree (CART)
+#### Model learning on Train data
+# Running the tree model for all predictors, and then viewing the model summary and plot:
+```{r}
+
+#install.packages("tree")
+library("tree")
+tree_train = data.frame(Points = ifelse(df.train$points >= 90,
+                                        T,
+                                        F), ##logical yes = above 90
+                        Price = log(df.train$price), ##Price :)
+                        Variety = ifelse(df.train$variety == "Chardonnay" | df.train$variety == "Riesling" | df.train$variety == "Sauvignon Blanc" | df.train$variety == "White Blend" | df.train$variety == "Sparkling Blend" | df.train$variety == "Pinot Gris" | df.train$variety == "Champagne Blend" | df.train$variety == "Grüner Veltliner" | df.train$variety == "Pinot Grigio" | df.train$variety == "Portuguese White" | df.train$variety == "Viognier" | df.train$variety == "Gewürztraminer" | df.train$variety == "Gewürztraminer",
+                                        "white wine",
+                                        "red wine"), ##sepperating red and white
+                        Description = as.numeric(df.train$description), ##number of chars in the description
+)
+summary(tree_train)
+tree_model <- tree(Points ~., Price+Description, data=tree_train)
+# tree_model = tree(Points ~., Price+Description, data=tree_train)
+plot(tree_model)
+text(tree_model, pretty = 0, cex = 0.8)
+```
+
+#train = points - ## logical yes above 90
+#new.df.train <- df.train[c(-1,-3,-12)] # trying to clean from irrelevant variables for the #CART Tree Model
+#Wine_Tree <- tree(new.df.train$points ~ . , data = new.df.train) #Train this tree with all #predictors
+#
+#plot(Wine_Tree)
+#text(Wine_Tree, pretty = 0, cex=0.5)
+
+# Ranfom Forest 
+#
+#
+# GBM 
+#
+#
+#
+
+```
+```{r}
+summary (Wine_Tree)
+
+```
+```{r}
+Wine_Tree
+
+```
+
+
+#### Model evaluation on Test data
+
+First predict the "left" value for the test data. Prediction is a probability between 0 to 1. 
+```{r}
+fitted.results <- predict(Wine_Tree,df.test)
+summary(fitted.results)
+
+```
+
+
+```{r}
+# Textual analysis of the wine reviews
+
+# Analyzing how many words are there in each review
+new_data$wordcount <- sapply(gregexpr("\\S+", new_data$description), length)
+
+summary(new_data$wordcount)
+
+ggplot(data = new_data, aes(x= wordcount))+
+  geom_histogram(binwidth = 3)+
+  labs(x = "Number of Words", y= "Frequency", title = "Nomber of words in Wine reviews") 
+
+ggplot(data = new_data, aes(x= wordcount, y= wine_type, fill = wine_type))+
+  geom_density_ridges ()+
+  labs(x = "Word Count", title = "Distribution of word count of description")+
+  scale_fill_cyclical(values = c("#CC3300", "#FFCC00"))
+
+ggplot(data = new_data, aes(x=variety, y=wordcount))+
+  geom_boxplot()+
+  coord_flip()+
+  labs(title = "Wordcount Distribution by Variety", x= "Variety", y= "Word Count")
+```
+
+```{r}
+# ggplot(data = new_data, aes(x=wordcount, y=points))+geom_point()
+
+Price_points_reg4 <- lm(log(price) ~ points + new_data$wordcount , data = new_data)
+summary(Price_points_reg4)
+
+par(mfrow = c(2,2))
+plot(Price_points_reg4)
+```
+```{r}
+# Applying Regression on Test Data
+
+Price_points_reg5 <- lm(log(price) ~ points + new_data$wordcount , data = df.test)
+summary(Price_points_reg5)
+
+par(mfrow = c(2,2))
+plot(Price_points_reg5)
+```
+
+
+
+```{r}
+  ### Random Forest (RF)
+#### Model learning on Train data
+# Running the random forest tree model on all predictors, and then view the model summary and plot:
+#install.packages("randomForest")
+library("randomForest")
+set.seed(7) #RF includes random selection. Repeat same seed to repeat the RF
+Wine.RF <- randomForest(log(price) ~ . , data = clean_train) #Train with all predictors
+Wine.RF
+
+```
+
+```{r}
+plot(Wine.RF)
+```
+
+```{r}
+importance(Wine.RF)
+```
+```{r}
+varImpPlot(Wine.RF)
+```
+#### Model evaluation on Test data
+
+First predict the "log(price)" value for the test data. Prediction is a probability between 0 to 1. 
+```{r}
+fitted.results <- predict(Wine.RF,clean_test)
+summary(fitted.results)
+
+```
+
+To turn this prediction into a classification, define values up to 0.5 predict 0 (not left) and for higher values predict 1 (left).
+```{r}
+threshold <- 0.5
+prediction <- ifelse(fitted.results > threshold,1,0)
+summary(prediction)
+```
+
+Now you can manualy calculate accuracy, precision and recall and draw table.
+Metrics can be calculated directly from the predicted vector "prediction" and the actual vector "log(df.test$price)":
+```{r}
+cross.table <- table(prediction, log(df.test$price))
+cross.table
+
+```
+From the table you can calculate manualy all KPIs:
+```{r}
+(cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1]) #accuracy 
+cross.table[2,2]/(cross.table[2,2]+cross.table[2,1]) #precision
+cross.table[2,2]/(cross.table[2,2]+cross.table[1,2]) #Recall
+```
