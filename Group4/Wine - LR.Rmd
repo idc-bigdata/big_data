@@ -1,5 +1,5 @@
 ---
-title: "Wine Reviews - Data Analysis"
+title: "Wine"
 author: "Rotem Zaarour & Dor Heldshtein & Lior Rosen"
 date: "January 2018"
 output:
@@ -7,12 +7,10 @@ output:
   word_document: default
   pdf_document: default
   html_document: default
-editor_options: 
-  chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ### 1. The data - EDA and preparing the DATA
@@ -23,7 +21,7 @@ knitr::opts_chunk$set(echo = TRUE)
    https://www.kaggle.com/zynicide/wine-reviews/data
 
 ```{r}
-df <- read.csv('C:/Users/Meni/Downloads/Winemag-data-130k-v2.csv') # Change this path to your downloaded file
+df <- read.csv('C:/Users/My-PC/Desktop/studies/Sem02/Data_Analytics_for_Business2-G.Shama/Wine_Protject/Data/winemag-data-130k-v2.csv') # Change this path to your downloaded file
 ```
 
 Exemaining n/a:
@@ -32,6 +30,8 @@ Exemaining n/a:
 print(colSums(is.na(df)))
 # as we see we have some n/a in the price so we sould clean it:
 df <- df[!is.na(df$price), ]
+df <- df[(df$country!= ""), ]
+#df <- df[(df$price != ""), ]
 ```
 
 Quick glance at the data:
@@ -47,18 +47,29 @@ unique_vals <- sapply(df, unique)
 summary(unique_vals)
 ```
 
-**adding data to the DATA**
+**Enriching the DATA**
 
 adding the wine types by red and white
 ```{r}
 # the following chunk requires installation of the package dplyr
 library(dplyr)
 
-df$wine_type = ifelse(df$variety == "Chardonnay" | df$variety == "Riesling" | df$variety == "Sauvignon Blanc" | df$variety == "White Blend" | df$variety == "Sparkling Blend" | df$variety == "Pinot Gris" | df$variety == "Champagne Blend" | df$variety == "Grüner Veltliner" | df$variety == "Pinot Grigio" | df$variety == "Portuguese White" | df$variety == "Viognier" | df$variety == "Gewürztraminer" | df$variety == "Gewürztraminer", 
+df$wine_type = ifelse(df$variety == "Chardonnay" | df$variety == "Riesling" | df$variety == "Sauvignon Blanc" | df$variety == "White Blend" | df$variety == "Sparkling Blend" | df$variety == "Pinot Gris" | df$variety == "Champagne Blend" | df$variety == "GrÃ¼ner Veltliner" | df$variety == "Pinot Grigio" | df$variety == "Portuguese White" | df$variety == "Viognier" | df$variety == "GewÃ¼rztraminer" | df$variety == "GewÃ¼rztraminer", 
                               "White Wine",
                               "Red Wine")
 df$wine_type = as.factor(df$wine_type)  
 summary(df$wine_type)
+```
+
+adding each country the mean of her score points and price:
+```{r}
+mean_pricePcntry = aggregate(price~country, data=df, mean)
+mean_pointsPcntry = aggregate(points~country, data=df, mean)
+
+enrich_means = merge(mean_pointsPcntry, mean_pricePcntry, by = "country")
+colnames(enrich_means) = c("country", "m.pntPcntry", "m.prcPcntry")
+df = merge(df, enrich_means, by = "country")
+
 ```
 
 adding external data ??
@@ -86,9 +97,13 @@ ggplot(data = df[(df$price<150),], aes(x= price, colour = I('black'), fill = I('
 summary(df$price)
 ggplot(data = df, aes(x= log(price), colour = I('black'), fill = I('#099DD9')))+geom_histogram()+labs(x = "log(Price)", y= "Frequency", title = "Wine Reviews - Log(prices) Histogram")
 summary(log(df$price))
+
+desc = data.frame(nw = (lengths(gregexpr(" ", df$description))+1))
+ggplot(data = desc, aes(x= nw, colour = I('black'), fill = I('#099DD9')))+geom_histogram()+labs(x = "Words", y= "Frequency", title = "Wine Reviews - Description words amount Histogram")
+summary(desc$nw)
 ```
 
-Now we would evaluate the differences between:
+Now we would see the difrences between:
 
 * Top 20 wine types.
 * Red and White wines.
@@ -164,49 +179,77 @@ grid.arrange(p5, p6, nrow=1)
 **filter and split to train and test, as learned before:**
 
 ```{r}
-
 set.seed(7) # Split to train 80% and test 20%
 bound <- floor((nrow(df)/5)*4)
 d <- df[sample(nrow(df)), ]
 df.train <- d[1:bound, ]
 df.test <- d[(bound+1):nrow(df), ]
-
 ```
 
-**prepearing the DATA:
-```{r prepering the DATA:}
+**prepearing the DATA:**
+
+```{r prepering the train DATA:}
 clean_train = data.frame(points = df.train$points,
                      price = log(df.train$price),
                      desc_nc = nchar(as.character(df.train$description)),
                      desc_nw = (lengths(gregexpr(" ", df.train$description))+1),
+                     DnwPpoint = log(lengths(gregexpr(" ", df.train$description))*1)+df.train$points,
                      title_nc = nchar(as.character(df.train$title)),
-                     cntry_code = as.numeric(df.train$country))
-#summary(clean_train)
+                     cntry_code = as.numeric(df.train$country),
+                     lg.price_points = log(df.train$price)*df.train$points,
+                     cntry_pnts = as.numeric(df.train$country)*df.train$points,
+                     pntPcntry = df.train$m.pntPcntry,
+                     prcPcntry = df.train$m.prcPcntry,
+                     cntry_m.points = as.numeric(df.train$country)*df.train$m.prcPcntry,
+                     isred = ifelse(df.train$wine_type == "White Wine", 0, 1)
+                     )
+summary(clean_train)
+```
 
-##adding the country grade
+###Cheking the coralation:
 
-cntry_grd = data.frame(points = clean_train$points,
-                       cntry_code = clean_train$cntry_code)
-cntry_grd
+```{r}
+cor(clean_train, clean_train)
+```
 
+
+~ we can see that we have coralation between ?? ~
+
+```{r}
+pairs(clean_train[c(2,1,3,4)], col = "blue", cex = 0.5, upper.panel = NULL)
+```
+
+**checking the test:**
+
+```{r prepering the test DATA:}
 clean_test = data.frame(points = df.test$points,
                      price = log(df.test$price),
                      desc_nc = nchar(as.character(df.test$description)),
                      desc_nw = (lengths(gregexpr(" ", df.test$description))+1),
+                     DnwPpoint = log(lengths(gregexpr(" ", df.test$description))*1)+df.test$points,
                      title_nc = nchar(as.character(df.test$title)),
-                     cntry_code = as.numeric(df.test$country))
-#summary(clean_train)
+                     cntry_code = as.numeric(df.test$country),
+                     lg.price_points = log(df.test$price)*df.test$points,
+                     cntry_pnts = as.numeric(df.test$country)*df.test$points,
+                     pntPcntry = df.test$m.pntPcntry,
+                     prcPcntry = df.test$m.prcPcntry,
+                     cntry_m.points = as.numeric(df.test$country)*df.test$m.prcPcntry,
+                     isred = ifelse(df.test$wine_type == "White Wine", 0, 1)
+                     )
+summary(clean_train)
+```
 
-##adding the country grade
+###Cheking the coralation:
 
-cntry_grd = data.frame(points = clean_train$points,
-                       cntry_code = clean_train$cntry_code)
-cntry_grd
+```{r}
+cor(clean_test, clean_test)
+```
 
-cntry_grd_test = data.frame(points = clean_test$points,
-                       cntry_code = clean_test$cntry_code)
-cntry_grd_test
 
+~ we can see that we have coralation between ?? ~
+
+```{r}
+pairs(clean_test[c(2,1,3,4)], col = "blue", cex = 0.5, upper.panel = NULL)
 ```
 
 
@@ -214,20 +257,20 @@ cntry_grd_test
 # Regression Models
 # Linear Regression
 
-Price_points_reg1 <- lm(log(price) ~ points, data = new_data)
+Price_points_reg1 <- lm(log(price) ~ points, data = clean_train)
 summary(Price_points_reg1)
 
 par(mfrow = c(2,2))
 plot(Price_points_reg1)
 
-Price_points_reg2 <- lm(log(price) ~ points + wine_type, data = new_data)
+Price_points_reg2 <- lm(log(price) ~ points + isred, data = clean_train)
 summary(Price_points_reg2)
 
 par(mfrow = c(2,2))
 plot(Price_points_reg2)
 
 
-Price_points_reg3 <- lm(log(price) ~ points^2 + points + wine_type, data = new_data)
+Price_points_reg3 <- lm(log(price) ~ points^2 + points + isred, data = clean_train)
 summary(Price_points_reg3)
 
 par(mfrow = c(2,2))
@@ -237,6 +280,24 @@ plot(Price_points_reg3)
 ```{r}
 # Applying the Regression Model on the Test Data
 
+#Price_points_reg1_test <- lm(log(price) ~ points, data = clean_test)
+#summary(Price_points_reg1_test)
+
+#par(mfrow = c(2,2))
+#plot(Price_points_reg1)
+
+Price_points_reg2_test <- lm(log(price) ~ points + points*desc_nc + isred, data = clean_test)
+summary(Price_points_reg2_test)
+
+par(mfrow = c(2,2))
+plot(Price_points_reg2)
+
+
+#Price_points_reg3_test <- lm(log(price) ~ points^2 + points + isred, data = clean_test)
+#summary(Price_points_reg3_test)
+
+#par(mfrow = c(2,2))
+#plot(Price_points_reg3)
 
 
 ```
@@ -248,22 +309,22 @@ plot(Price_points_reg3)
 
 #install.packages("tree")
 library("tree")
-tree_train = data.frame(Points = ifelse(df.train$points >= 90,
+tree_train = data.frame(price = log(df.train$price), ##Price :)
+                        Verity = as.numeric(ifelse(df.train$wine_type == "Red Wine",
+                                        2,
+                                        1)),
+                        pnt_desc = df.train$points*as.integer(df.train$description), ##number of chars in the description
+                        region = df.train$region_2,
+                        Pointsabv90 = ifelse(df.train$points >= 90,
                                         T,
-                                        F), ##logical yes = above 90
-                        Price = log(df.train$price), ##Price :)
-                        Variety = ifelse(df.train$variety == "Chardonnay" | df.train$variety == "Riesling" | df.train$variety == "Sauvignon Blanc" | df.train$variety == "White Blend" | df.train$variety == "Sparkling Blend" | df.train$variety == "Pinot Gris" | df.train$variety == "Champagne Blend" | df.train$variety == "Grüner Veltliner" | df.train$variety == "Pinot Grigio" | df.train$variety == "Portuguese White" | df.train$variety == "Viognier" | df.train$variety == "Gewürztraminer" | df.train$variety == "Gewürztraminer",
-                                        "white wine",
-                                        "red wine"), ##sepperating red and white
-                        Description = as.numeric(df.train$description), ##number of chars in the description
+                                        F) ##logical yes = above 90
 )
-summary(tree_train)
-tree_model <- tree(Points ~., Price+Description, data=tree_train)
-# tree_model = tree(Points ~., Price+Description, data=tree_train)
-plot(tree_model)
-text(tree_model, pretty = 0, cex = 0.8)
-```
 
+tree_model = tree(price ~., tree_train)
+plot(tree_model)
+text(tree_model, pretty = 1, cex = 0.5)
+
+summary(tree_model)
 #train = points - ## logical yes above 90
 #new.df.train <- df.train[c(-1,-3,-12)] # trying to clean from irrelevant variables for the #CART Tree Model
 #Wine_Tree <- tree(new.df.train$points ~ . , data = new.df.train) #Train this tree with all #predictors
@@ -340,58 +401,5 @@ summary(Price_points_reg5)
 
 par(mfrow = c(2,2))
 plot(Price_points_reg5)
-```
 
-
-
-```{r}
-  ### Random Forest (RF)
-#### Model learning on Train data
-# Running the random forest tree model on all predictors, and then view the model summary and plot:
-#install.packages("randomForest")
-library("randomForest")
-set.seed(7) #RF includes random selection. Repeat same seed to repeat the RF
-Wine.RF <- randomForest(log(price) ~ . , data = clean_train) #Train with all predictors
-Wine.RF
-
-```
-
-```{r}
-plot(Wine.RF)
-```
-
-```{r}
-importance(Wine.RF)
-```
-```{r}
-varImpPlot(Wine.RF)
-```
-#### Model evaluation on Test data
-
-First predict the "log(price)" value for the test data. Prediction is a probability between 0 to 1. 
-```{r}
-fitted.results <- predict(Wine.RF,clean_test)
-summary(fitted.results)
-
-```
-
-To turn this prediction into a classification, define values up to 0.5 predict 0 (not left) and for higher values predict 1 (left).
-```{r}
-threshold <- 0.5
-prediction <- ifelse(fitted.results > threshold,1,0)
-summary(prediction)
-```
-
-Now you can manualy calculate accuracy, precision and recall and draw table.
-Metrics can be calculated directly from the predicted vector "prediction" and the actual vector "log(df.test$price)":
-```{r}
-cross.table <- table(prediction, log(df.test$price))
-cross.table
-
-```
-From the table you can calculate manualy all KPIs:
-```{r}
-(cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1]) #accuracy 
-cross.table[2,2]/(cross.table[2,2]+cross.table[2,1]) #precision
-cross.table[2,2]/(cross.table[2,2]+cross.table[1,2]) #Recall
-```
+  ```
