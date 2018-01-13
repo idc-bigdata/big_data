@@ -98,10 +98,14 @@ NS_CLEAN <- data.frame(NS_CLEAN$PatientId
                        , NS_CLEAN$Handcap
                        , NS_CLEAN$SMS_received
                        , NS_CLEAN$numeric_no_show
+                       , NS_CLEAN$poverty
+                       , NS_CLEAN$x_coor
+                       , NS_CLEAN$y_coor
+                       , NS_CLEAN$region
 )
 names(NS_CLEAN) <- c("patient_id","appointment","week_day","schedule_date","appointmnet_date","waiting_time"
                      ,"age","is_female","scholarship","neighbourhood","hipertension","diabetes","alcoholism"
-                     ,"handcap","sms_recieved","no_show")
+                     ,"handcap","sms_recieved","no_show", "poverty", "x_coor", "y_coor","region")
 
 # Write the complete dataset
 write.csv(NS_CLEAN, file="NS_CLEAN.csv", quote=FALSE, na="NA", row.names=FALSE)
