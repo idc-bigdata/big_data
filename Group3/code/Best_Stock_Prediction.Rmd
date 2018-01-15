@@ -1,0 +1,235 @@
+---
+title: "All_Stocks_classification"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+## Stocks Predict - Logistic Regression in R 
+
+```{r}
+#install.packages('quantmod')
+#install.packages('binhf')
+#library(binhf)
+#library(quantmod)
+#library(TTR)
+#library(xts)
+df.transformed <- read.csv('C:/Users/ori dahari/Documents/MBA/mini1/bigData/data/ALL_Stocks_Adjusted.csv')
+df.transformed=df.transformed[,-c(1,2)]
+#df.transformed$Date=as.Date(df.transformed$Date, format = "%d/%m/%Y")
+#df.transformed <- xts(df.transformed[,-1], order.by=df.transformed[,1])
+
+```
+
+## function that return fitted.results for RF model
+```{r}
+predictRFModel <- function(model,df.test){
+    #### Model evaluation on Test data
+    
+    ###First predict the "left" value for the test data. Prediction is a probability between 0 to 1. 
+    
+    return( predict(model,df.test) )
+    
+}
+
+```
+
+## function that return fitted.results for GBM model
+```{r}
+predictGBMModel <- function(model,df.test){
+    #### Model evaluation on Test data
+    
+    ###First predict the "left" value for the test data. Prediction is a probability between 0 to 1. 
+    
+    return( predict(model,df.test, n.trees = 1000) )
+    
+}
+
+```
+
+## function that return Accuracy,Precision, and Recall of classification model 
+```{r}
+evaluationModel <- function(df.test, fitted.results){
+    #### Model evaluation on Test data
+ 
+    threshold <- 0.5
+    prediction <- ifelse(fitted.results > threshold,1,0)
+    
+    cross.table <- table(prediction, df.test$Up_Down )
+    
+        ###From the table you can calculate manualy all KPIs:
+    
+    acc=(cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1]) #accuracy 
+    prec=cross.table[2,2]/(cross.table[2,2]+cross.table[2,1]) #precision
+    rec=cross.table[2,2]/(cross.table[2,2]+cross.table[1,2]) #Recall
+    
+   summary_data=data.frame(Accuracy=acc ,Precision=prec , Recall=rec)
+     
+     return(summary_data)
+
+}
+
+```
+
+
+```{r}
+mlModel <- function(df.transformed){
+
+     # Split to train 75% and test 25%
+    bound <- floor((nrow(df.transformed)/4)*3)
+    df.train <- df.transformed[1:bound, ]
+    df.test <- df.transformed[(bound+1):nrow(df.transformed), ]
+    
+    ### Random Forest (RF)
+    #### Model learning on Train data
+    #### Run the tree model for all predictors, and then view the model summary and plot:
+    
+    #install.packages("randomForest")
+    library("randomForest")
+    
+    set.seed(7) #RF includes random selection. Repeat same seed to repeat the RF
+   # Stock.RF <- randomForest(Up_Down ~. , data = df.train ,na.action=na.exclude) #Train with all predictors
+    #fitted.results.RF=predictRFModel(Stock.RF,df.test)
+    
+    
+    # install.packages("gbm")
+   # library("gbm")
+    set.seed(7) #GBM includes random selection. Repeat same seed to repeat the RF
+    Stock.GBM <- gbm (Up_Down ~ . , data = df.train, n.trees = 1000, interaction.depth = 4, shrinkage = 0.2, verbose = F) #gbm
+    fitted.results.GBM=predictGBMModel(Stock.GBM,df.test)
+    
+   # result.RF= cbind(Model="RF", evaluationModel(df.test,fitted.results.RF)) 
+    result.GBM= cbind(Model="GBM", evaluationModel(df.test,fitted.results.GBM)) 
+    return(esult.GBM)
+      #  return(rbind(result.RF,result.GBM))
+}
+
+
+```
+
+## do RF and GBM each stock
+```{r}
+library("randomForest")
+library("gbm")
+All.Stocks.Model.Results=data.frame()
+Split.df=data.frame()
+
+All_Symbols=as.character(unique(df.transformed$Symbol))
+
+df.transformed$Up_Down <- as.numeric(df.transformed$Up_Down)
+ 
+#df.transformed$Up_Down <- as.character(df.transformed$Up_Down)
+#df.transformed$Up_Down <- as.factor(df.transformed$Up_Down)
+
+for (i in 1:2) {
+     
+    Split.df=df.transformed[df.transformed$Symbol==All_Symbols[i],]
+    Sym.Name=toString(All_Symbols[i])
+    if(length(Split.df$Symbol)>999){ 
+      ml=data.frame(Symbol=c(Sym.Name,Sym.Name),mlModel(coredata(Split.df[,-c(1)])))
+      All.Stocks.Model.Results= rbind(All.Stocks.Model.Results,ml)
+    }
+}
+
+All.Stocks.Model.Results
+
+```
+
+## do RF and GBM each stock
+```{r}
+#install.packages('quantmod')
+#install.packages('binhf')
+#library(binhf)
+#library(quantmod)
+#library(TTR)
+Stock=Split.df
+
+Stock.EMA.50 <- EMA(Stock$Close, n=50) 
+Stock.EMA.200 <- EMA(Stock$Close, n=200) 
+Slow.Diff <- Stock.EMA.50 - Stock.EMA.200
+CCI.IND <- CCI(HLC=Stock[,c("High","Low","Close")],n=100)
+
+# look for long entries
+Long_Trades <- ifelse(
+     shift(v=as.numeric(CCI.IND), places=1, dir="right") > CCI.IND &
+        CCI.IND < 100 & 
+        Slow.Diff > 0, Stock$Close, NA)
+
+# look for short entries
+Short_Trades <- ifelse(
+       shift(v=as.numeric(CCI.IND), places=1, dir="right") < CCI.IND &
+        CCI.IND > -100 & 
+         Slow.Diff < 0, Stock$Close, NA)
+
+plot(Stock$Close)
+
+points(Long_Trades, col='blue', cex=1.5, pch=18)
+points(Short_Trades, col='red', cex=1.5, pch=18)
+
+```
+
+```{r}
+#library("randomForest")
+#library("gbm")
+All.Stocks.Model.Results=data.frame()
+Split.df=data.frame()
+
+All_Symbols=as.character(unique(df.transformed$Symbol))
+
+df.transformed$Up_Down <- as.numeric(df.transformed$Up_Down)
+ 
+#df.transformed$Up_Down <- as.character(df.transformed$Up_Down)
+#df.transformed$Up_Down <- as.factor(df.transformed$Up_Down)
+
+ 
+for (i in 1:2) {
+     
+    Split.df=df.transformed[df.transformed$Symbol==All_Symbols[i],]
+    Split.df=addInd(Split.df)
+  
+    Sym.Name=toString(All_Symbols[i])
+    if(length(Split.df$Symbol)>999){ 
+      ml=data.frame(Symbol=c(Sym.Name,Sym.Name),mlModel(Split.df[,-c(1)]))
+      All.Stocks.Model.Results= rbind(All.Stocks.Model.Results,ml)
+    }
+}
+
+All.Stocks.Model.Results
+
+setwd("C:/Users/ori dahari/Documents/MBA/mini1/bigData/data/")
+
+write.csv(Split.df ,file="AA.csv")
+
+```
+
+```{r}
+addInd<- function(data2){
+  
+  data2$MACD <- MACD(data2$Close)
+ data2$will <- williamsAD(data2[,c("High","Low","Close")])
+ data2$cci <-  CCI(data2[,c("High","Low","Close")])
+ data2$STOCH <- stoch(data2[,c("High","Low","Close")])
+ data2$Aroon <- aroon(data2[, c("High","Low")])
+ data2$ATR <- ATR(data2[,c("High","Low","Close")]) 
+
+ data2$SMI <- SMI(data2[, c("High","Low","Close")])
+ data2$BB <- BBands(data2[, c("High","Low","Close")])
+ data2$ChaikinVol <-Delt(chaikinVolatility(data2[, c("High","Low")]))
+ data2$CLV <- EMA(CLV(data2[, c("High","Low","Close")]))
+ data2$Volatility <- volatility(data2[, c("Open","High","Low","Close")], calc="garman")
+  
+ return(data2)
+  
+}
+```
+
+
