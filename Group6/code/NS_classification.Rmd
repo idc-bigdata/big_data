@@ -6,7 +6,7 @@ output: NS_classi
 ### Import data and set objective
 ```{r}
 #library(knitr)
-knitr::opts_knit$set(root.dir = "~/source/big_data/Group6/datasets")
+knitr::opts_knit$set(root.dir = "~/source/big_data/big_data/Group6/datasets")
 df.train <- read.csv("../datasets/NS.TRAIN.csv")
 df.test <- read.csv("../datasets/NS.TEST.csv")
 ```
@@ -79,49 +79,97 @@ since the Y column is numeric and categorical, the problem is a classification p
 ##### Numeric column histograms
 ```{r}
 df = na.omit(df.train)
-par(mfrow=c(2,3));
+par(mfrow=c(2,4));
 hist(df$week_day, main="week_day", breaks = 10)
-hist(df$waiting_time, main="waiting_time", breaks = 10)
-hist(df$age, main="age", breaks = 10)
+hist(log(df$waiting_time+1), main="log waiting_time", breaks = 10)
+hist(sqrt(df$age), main="sqrt age", breaks = 10)
 hist(df$poverty, main="poverty", breaks = 10)
 hist(df$region, main="region", breaks = 10)
+hist(log(df$same_day+1), main="same_day", breaks = 10)
+hist(log(df$week_before+1), main="week_before", breaks = 10)
+hist(log(df$ever_before+1), main="ever_before", breaks = 10)
+```
+### EDA
+```{r}
+# looking for no_show frequencies over waiting time
+eda_waiting_time<-aggregate(df.train$no_show, by=list(log(df.train$waiting_time+1)), FUN=mean)
+names(eda_waiting_time)=c("waiting time","No show prob")
+plot(eda_waiting_time, eda_waiting_time$x, type="p", main="No show prob vs. log waiting time")
+```
+We can identify a group of confident shows around 100 waiting time (days), or 4.5 in log, whereas the majority is around probability of 0.3
+
+```{r}
+eda_week_day<-aggregate(df.train$no_show, by=list(df.train$week_day), FUN=mean)
+plot(eda_week_day, eda_week_day$x, type="l", main="No show prob vs. week_day")
+```
+```{r}
+eda_age<-aggregate(df.train$no_show, by=list((df.train$age)), FUN=mean)
+plot(eda_age, eda_age$x, type="p", main="No show prob vs. age")
+```
+
+```{r}
+eda_scholarship<-aggregate(df.train$no_show, by=list((df.train$scholarship)), FUN=mean)
+plot(eda_scholarship, eda_scholarship$x, type="l", main="No show prob vs. scholarship")
+```
+
+```{r}
+eda_sms_recieved<-aggregate(df.train$no_show, by=list((df.train$sms_recieved)), FUN=mean)
+plot(eda_sms_recieved, eda_sms_recieved$x, type="l", main="No show prob vs. sms_recieved")
+```
+```{r}
+# Low probability - 
+par(mfrow=c(2,4))
+eda_is_female<-aggregate(df.train$no_show, by=list(df.train$is_female), FUN=mean)
+plot(eda_is_female, eda_is_female$x, type="l", main="No show prob vs. is_female", ylim=c(0,1))
+
+eda_poverty<-aggregate(df.train$no_show, by=list((df.train$poverty)), FUN=mean)
+plot(eda_poverty, eda_poverty$x, type="l", main="No show prob vs. poverty", ylim=c(0,1))
+
+eda_diabetes<-aggregate(df.train$no_show, by=list((df.train$diabetes)), FUN=mean)
+plot(eda_diabetes, eda_diabetes$x, type="l", main="No show prob vs. diabetes", ylim=c(0,1))
+
+eda_hipertension<-aggregate(df.train$no_show, by=list((df.train$hipertension)), FUN=mean)
+plot(eda_hipertension, eda_hipertension$x, type="l", main="No show prob vs. hipertension", ylim=c(0,1))
+
+eda_handcap<-aggregate(df.train$no_show, by=list((df.train$handcap)), FUN=mean)
+plot(eda_handcap, eda_handcap$x, type="l", main="No show prob vs. handcap", ylim=c(0,1))
+
+eda_same_day<-aggregate(df.train$no_show, by=list((df.train$same_day)), FUN=mean)
+plot(eda_same_day, eda_same_day$x, type="l", main="No show prob vs. same_day", ylim=c(0,1))
+
+eda_week_before<-aggregate(df.train$no_show, by=list((df.train$week_before)), FUN=mean)
+plot(eda_week_before, eda_week_before$x, type="l", main="No show prob vs. week_before", ylim=c(0,1))
+
+eda_ever_before<-aggregate(df.train$no_show, by=list((df.train$ever_before)), FUN=mean)
+plot(eda_ever_before, eda_ever_before1$x, type="l", main="No show prob vs. ever_before", ylim=c(0,1))
+     
 ```
 
 ### Modeling
 #### LM
 ```{r}
-logit_all_model <- glm(no_show ~ week_day+
-                         waiting_time+
-                         age+
-                         is_female+
-                         scholarship+
-                         hipertension+
-                         diabetes+
-                         alcoholism+
-                         handcap+
-                         sms_recieved+
-                         poverty+
-                         region
-                       , data = df.train, family = binomial)
+df.train$log_waiting_time <- log(df.train$waiting_time+1)
+logit_all_model <- glm(no_show ~ age+log_waiting_time+scholarship+sms_recieved, data = df.train, family = binomial)
 summary (logit_all_model)
 plot(logit_all_model)
 ```
+
 
 #### CART
 ```{r}
 library("tree")
 noshow.CART <- tree(no_show ~ week_day+
-                         waiting_time+
-                         sqrt(age)+
-                         is_female+
-                         scholarship+
-                         hipertension+
-                         diabetes+
-                         alcoholism+
-                         handcap+
-                         sms_recieved+
-                         poverty+
-                         region ,data = df.train)
+                      log(waiting_time+1)+
+                      sqrt(age)+
+                      is_female+
+                      scholarship+
+                      hipertension+
+                      diabetes+
+                      alcoholism+
+                      handcap+
+                      sms_recieved+
+                      poverty+
+                      region,data = df.train)
 plot(noshow.CART)
 text(noshow.CART, pretty = 0, cex=0.5)
 summary(noshow.CART)
@@ -133,8 +181,8 @@ summary(noshow.CART)
 library("randomForest")
 set.seed(7)
 noshow.RF <- randomForest(no_show ~ week_day+
-                         waiting_time+
-                         age+
+                         log_waiting_time+
+                         sqrtage+
                          is_female+
                          scholarship+
                          sms_recieved+
