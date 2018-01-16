@@ -3,8 +3,8 @@
 ######################
 
 # Set output and input directories into variables to be used in the script (replace with your directories)
-InputDir <- "~/source/big_data/big_data/Group6/"
-OutputDir <- "~/source/big_data/big_data/Group6/"
+InputDir <- "c:/big_data/Group6/"
+OutputDir <- "c:/big_data/Group6/"
 
 # Set Options
 Sys.setlocale(category="LC_TIME", locale="English")
@@ -23,6 +23,7 @@ options(digits=4, max.print=1000, stringsAsFactors=FALSE, scipen=10)
 setwd(InputDir)
 NS <- read.csv("datasets/KaggleV2-May-2016-Fixed_Names.csv", header = TRUE, as.is =  TRUE, na.strings = c("NA",".",""))
 
+
 ######################
 ##    Format Data   ## 
 ######################
@@ -39,13 +40,13 @@ NS$AppointmentDay <- as.Date(NS$AppointmentDay, format="%Y-%m-%d")
 NS$week_day <- as.POSIXlt(NS$AppointmentDay)$wday
 
 # Create numeric no show column
-NS[!(NS$No.show== "No"), "numeric_no_show"] <- 1
-NS[!(NS$No.show== "Yes"), "numeric_no_show"] <- 0
+NS[(NS$No.show== "No"), "numeric_no_show"] <- 0
+NS[(NS$No.show== "Yes"), "numeric_no_show"] <- 1
 NS$numeric_no_show <- as.integer(NS$numeric_no_show)
 
 # Create numeric gender column
-NS[!(NS$Gender== "F"), "is_female"] <- 1
-NS[!(NS$Gender== "M"), "is_female"] <- 0
+NS[(NS$Gender== "F"), "is_female"] <- 1
+NS[(NS$Gender== "M"), "is_female"] <- 0
 NS$is_female <- as.integer(NS$is_female)
 
 # Create waiting time column
@@ -123,6 +124,36 @@ GEODATA <- read.csv("datasets/geodata-Fixed-Names.csv", header = TRUE, as.is =  
 
 NS <- merge(NS, GEODATA, by = "Neighbourhood", all.x = TRUE, all.y = FALSE)
 
+# One hot encode region
+NS$region_1 <- 0
+NS[(NS$region== 1), "region_1"] <- 1
+
+NS$region_2 <- 0
+NS[(NS$region== 2), "region_2"] <- 1
+
+NS$region_3 <- 0
+NS[(NS$region== 3), "region_3"] <- 1
+
+NS$region_4 <- 0
+NS[(NS$region== 4), "region_4"] <- 1
+
+NS$region_5 <- 0
+NS[(NS$region== 5), "region_5"] <- 1
+
+NS$region_6 <- 0
+NS[(NS$region== 6), "region_6"] <- 1
+
+NS$region_7 <- 0
+NS[(NS$region== 7), "region_7"] <- 1
+
+NS$region_8 <- 0
+NS[(NS$region== 8), "region_8"] <- 1
+
+NS$region_9 <- 0
+NS[(NS$region== 9), "region_9"] <- 1
+
+
+
 ######################
 ##    Review Data   ## 
 ######################
@@ -178,11 +209,52 @@ NS_CLEAN <- data.frame(NS_CLEAN$PatientId
                          , NS_CLEAN$known_ever_after
                          , NS_CLEAN$all_known_appointments
                          , NS_CLEAN$numeric_no_show
+                         , NS_CLEAN$region_1
+                         , NS_CLEAN$region_2
+                         , NS_CLEAN$region_3
+                         , NS_CLEAN$region_4
+                         , NS_CLEAN$region_5
+                         , NS_CLEAN$region_6
+                         , NS_CLEAN$region_7
+                         , NS_CLEAN$region_8
+                         , NS_CLEAN$region_9
                           )
 
-names(NS_CLEAN) <- c("patient_id","appointment","week_day","schedule_date","appointmnet_date","waiting_time"
-                     ,"age","is_female","scholarship","neighbourhood","region", "poverty", "x_coor", "y_coor", "hipertension","diabetes","alcoholism"
-                     ,"handcap","sms_recieved","same_day","week_before","ever_before","known_week_after","known_ever_after","all_known_appointments","no_show")
+names(NS_CLEAN) <- c("patient_id"
+                     ,"appointment"
+                     ,"week_day"
+                     ,"schedule_date"
+                     ,"appointmnet_date"
+                     ,"waiting_time"
+                     ,"age"
+                     ,"is_female"
+                     ,"scholarship"
+                     ,"neighbourhood"
+                     ,"region"
+                     ,"poverty"
+                     ,"x_coor"
+                     ,"y_coor"
+                     ,"hipertension"
+                     ,"diabetes"
+                     ,"alcoholism"
+                     ,"handcap"
+                     ,"sms_recieved"
+                     ,"same_day"
+                     ,"week_before"
+                     ,"ever_before"
+                     ,"known_week_after"
+                     ,"known_ever_after"
+                     ,"all_known_appointments"
+                     ,"no_show"
+                     ,"region_1"
+                     ,"region_2"
+                     ,"region_3"
+                     ,"region_4"
+                     ,"region_5"
+                     ,"region_6"
+                     ,"region_7"
+                     ,"region_8"
+                     ,"region_9")
 
 
 summary(NS_CLEAN)
