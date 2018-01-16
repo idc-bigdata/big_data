@@ -40,8 +40,8 @@ NS$AppointmentDay <- as.Date(NS$AppointmentDay, format="%Y-%m-%d")
 NS$week_day <- as.POSIXlt(NS$AppointmentDay)$wday
 
 # Create numeric no show column
-NS[(NS$No.show== "No"), "numeric_no_show"] <- 0
-NS[(NS$No.show== "Yes"), "numeric_no_show"] <- 1
+NS[!(NS$No.show== "No"), "numeric_no_show"] <- 1
+NS[!(NS$No.show== "Yes"), "numeric_no_show"] <- 0
 NS$numeric_no_show <- as.integer(NS$numeric_no_show)
 
 # Create numeric gender column
@@ -284,3 +284,4 @@ NS.TEST <- D[(bound+1):total, ]
 # Write each file to a CSV for future reuses
 write.csv(NS.TRAIN, file="datasets/NS.TRAIN.csv", quote=FALSE, na="NA", row.names=FALSE)
 write.csv(NS.TEST, file="datasets/NS.TEST.csv", quote=FALSE, na="NA", row.names=FALSE)
+
