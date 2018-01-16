@@ -1,10 +1,11 @@
+
 ######################
 #  General Settings  #
 ######################
 
 # Set output and input directories into variables to be used in the script (replace with your directories)
-InputDir <- "c:/big_data/Group6/"
-OutputDir <- "c:/big_data/Group6/"
+InputDir <- "~/source/big_data/Group6/datasets/"
+OutputDir <- "~/source/big_data/Group6/datasets/"
 
 # Set Options
 Sys.setlocale(category="LC_TIME", locale="English")
@@ -21,7 +22,7 @@ options(digits=4, max.print=1000, stringsAsFactors=FALSE, scipen=10)
 
 # Import data
 setwd(InputDir)
-NS <- read.csv("datasets/KaggleV2-May-2016-Fixed_Names.csv", header = TRUE, as.is =  TRUE, na.strings = c("NA",".",""))
+NS <- read.csv("KaggleV2-May-2016-Fixed_Names.csv", header = TRUE, as.is =  TRUE, na.strings = c("NA",".",""))
 
 
 ######################
@@ -113,13 +114,13 @@ NS$waiting_time <- as.integer(NS$waiting_time)
 # # Stop the timer
 # proc.time() - ptm 
 
-APPOINTMENT_COUNTS <- read.csv("datasets/APPOINTMENT_COUNTS.csv", header = TRUE, as.is =  TRUE, na.strings = c("NA",".",""))
+APPOINTMENT_COUNTS <- read.csv("APPOINTMENT_COUNTS.csv", header = TRUE, as.is =  TRUE, na.strings = c("NA",".",""))
 # View(APPOINTMENT_COUNTS)
 
 NS <- merge(NS,APPOINTMENT_COUNTS, by = "AppointmentID", all.x = TRUE, all.y = FALSE)
 
 # Add geodata
-GEODATA <- read.csv("datasets/geodata-Fixed-Names.csv", header = TRUE, as.is =  TRUE, na.strings = c("NA",".",""))
+GEODATA <- read.csv("geodata-Fixed-Names.csv", header = TRUE, as.is =  TRUE, na.strings = c("NA",".",""))
 # View(GEODATA)
 
 NS <- merge(NS, GEODATA, by = "Neighbourhood", all.x = TRUE, all.y = FALSE)
@@ -261,7 +262,7 @@ summary(NS_CLEAN)
 str(NS_CLEAN)
 
 # Write the complete dataset
-write.csv(NS_CLEAN, file="datasets/NS_CLEAN.csv", quote=FALSE, na="NA", row.names=FALSE)
+write.csv(NS_CLEAN, file="NS_CLEAN.csv", quote=FALSE, na="NA", row.names=FALSE)
 
 ###############################################
 ##  Splitting the data into train and test  ## 
@@ -282,6 +283,5 @@ NS.TRAIN <- D[1:bound, ]
 NS.TEST <- D[(bound+1):total, ]
 
 # Write each file to a CSV for future reuses
-write.csv(NS.TRAIN, file="datasets/NS.TRAIN.csv", quote=FALSE, na="NA", row.names=FALSE)
-write.csv(NS.TEST, file="datasets/NS.TEST.csv", quote=FALSE, na="NA", row.names=FALSE)
-
+write.csv(NS.TRAIN, file="NS.TRAIN.csv", quote=FALSE, na="NA", row.names=FALSE)
+write.csv(NS.TEST, file="NS.TEST.csv", quote=FALSE, na="NA", row.names=FALSE)
