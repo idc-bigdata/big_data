@@ -1,12 +1,11 @@
 ---
 title: "Business Data analytics Group 6- Show/No Show classification"
-output: NS_classi
 ---
 
 ### Import data and set objective
 ```{r}
 #library(knitr)
-knitr::opts_knit$set(root.dir = "~/source/big_data/big_data/Group6/datasets")
+knitr::opts_knit$set(root.dir = "~/source/big_data/Group6/datasets")
 df.train <- read.csv("../datasets/NS.TRAIN.csv")
 df.test <- read.csv("../datasets/NS.TEST.csv")
 ```
@@ -24,45 +23,41 @@ summary(df.train)
 Display the summarize and define a business target
 
 ##### Business question
-TBD
+1. Is it possible to predict no show to Dr. appointments?
+
 ##### Predictor columnds explained
-* patient_id - 
-* appointment - 
-* week_day - 
-* schedule_date - 
-* appointmnet_date -
-* waiting_time - 
-* age - 
-* is_female - 
-* scholarship - 
-* neighbourhood
+* patient_id - Patient ID
+* appointment - Appointment ID
+* week_day - Numeric week day (1-6)
+* schedule_date - Schedule date
+* appointmnet_date - Appointmnet date
+* waiting_time - Diff between Schedule and Appointmnet
+* age - Age of patient
+* is_female - Sex (boolean)
+* scholarship - Scholarshop recieved (boolean)
+* neighbourhood - Neighbourhood
 * hipertension
 * diabetes
 * alcoholism
 * handcap
 * sms_recieved
-* no_show
-* poverty
-* x_coor
-* y_coor
-* region
-
-##### Evaluation matric of models
- 
-TBD
+* poverty - Neighbourhood poverty rank
+* x_coor - Langtatude
+* y_coor - Latatude
+* region - Neighbourhood numeric region 
+* no_show - Showed to appointment (boolean)
 
 ### EDA and IDA
 ##### Numeric and Categorical  
-numeric| categorical
------- | --------
-X      | country
-Price  | designation
-points | province
-  -    | region_1+2
-  -    | variety
-  -    | description
-  -    | country
-  -    | winery
+numeric     | categorical
+----------- | ------------
+patient_id  | schedule_date
+appointment | appointmnet_date
+week_day    | neighbourhood
+waiting_time| poverty
+age         | -
+is_female   | -
+scholarship | -
 
 ##### which columns have missing values
 ```{r}
@@ -85,11 +80,13 @@ hist(log(df$waiting_time+1), main="log waiting_time", breaks = 10)
 hist(sqrt(df$age), main="sqrt age", breaks = 10)
 hist(df$poverty, main="poverty", breaks = 10)
 hist(df$region, main="region", breaks = 10)
-hist(log(df$same_day+1), main="same_day", breaks = 10)
-hist(log(df$week_before+1), main="week_before", breaks = 10)
-hist(log(df$ever_before+1), main="ever_before", breaks = 10)
+hist(log(df$same_day+1), main="log same_day", breaks = 10)
+hist(log(df$week_before+1), main="log week_before", breaks = 10)
+hist(log(df$ever_before+1), main="log ever_before", breaks = 10)
 ```
+
 ### EDA
+#### High probability graphs 
 ```{r}
 # looking for no_show frequencies over waiting time
 eda_waiting_time<-aggregate(df.train$no_show, by=list(log(df.train$waiting_time+1)), FUN=mean)
@@ -103,8 +100,8 @@ eda_week_day<-aggregate(df.train$no_show, by=list(df.train$week_day), FUN=mean)
 plot(eda_week_day, eda_week_day$x, type="l", main="No show prob vs. week_day")
 ```
 ```{r}
-eda_age<-aggregate(df.train$no_show, by=list((df.train$age)), FUN=mean)
-plot(eda_age, eda_age$x, type="p", main="No show prob vs. age")
+eda_age<-aggregate(df.train$no_show, by=list(sqrt(df.train$age)), FUN=mean)
+plot(eda_age, eda_age$x, type="p", main="No show prob vs. sqrt age")
 ```
 
 ```{r}
@@ -116,8 +113,8 @@ plot(eda_scholarship, eda_scholarship$x, type="l", main="No show prob vs. schola
 eda_sms_recieved<-aggregate(df.train$no_show, by=list((df.train$sms_recieved)), FUN=mean)
 plot(eda_sms_recieved, eda_sms_recieved$x, type="l", main="No show prob vs. sms_recieved")
 ```
+#### Low probability graphs
 ```{r}
-# Low probability - 
 par(mfrow=c(2,4))
 eda_is_female<-aggregate(df.train$no_show, by=list(df.train$is_female), FUN=mean)
 plot(eda_is_female, eda_is_female$x, type="l", main="No show prob vs. is_female", ylim=c(0,1))
@@ -141,17 +138,26 @@ eda_week_before<-aggregate(df.train$no_show, by=list((df.train$week_before)), FU
 plot(eda_week_before, eda_week_before$x, type="l", main="No show prob vs. week_before", ylim=c(0,1))
 
 eda_ever_before<-aggregate(df.train$no_show, by=list((df.train$ever_before)), FUN=mean)
-plot(eda_ever_before, eda_ever_before1$x, type="l", main="No show prob vs. ever_before", ylim=c(0,1))
+plot(eda_ever_before, eda_ever_before$x, type="l", main="No show prob vs. ever_before", ylim=c(0,1))
      
 ```
 
 ### Modeling
+```{r}
+# converting to log and sqrt
+df.train$log_waiting_time <- log(df.train$waiting_time+1)
+df.train$sqrt_age <- sqrt(df.train$age)
+```
+
 #### LM
 ```{r}
-df.train$log_waiting_time <- log(df.train$waiting_time+1)
-logit_all_model <- glm(no_show ~ age+log_waiting_time+scholarship+sms_recieved, data = df.train, family = binomial)
-summary (logit_all_model)
-plot(logit_all_model)
+logit_model <- glm(no_show ~ sqrt_age+
+                         log_waiting_time+
+                         scholarship+
+                         sms_recieved+
+                         region, data = df.train, family = binomial)
+summary (logit_model)
+plot(logit_model)
 ```
 
 
@@ -159,8 +165,8 @@ plot(logit_all_model)
 ```{r}
 library("tree")
 noshow.CART <- tree(no_show ~ week_day+
-                      log(waiting_time+1)+
-                      sqrt(age)+
+                      log_waiting_time+
+                      sqrt_age+
                       is_female+
                       scholarship+
                       hipertension+
@@ -169,11 +175,10 @@ noshow.CART <- tree(no_show ~ week_day+
                       handcap+
                       sms_recieved+
                       poverty+
-                      region,data = df.train)
+                      region ,data = df.train)
 plot(noshow.CART)
 text(noshow.CART, pretty = 0, cex=0.5)
 summary(noshow.CART)
-
 ```
 
 #### RF
@@ -182,15 +187,14 @@ library("randomForest")
 set.seed(7)
 noshow.RF <- randomForest(no_show ~ week_day+
                          log_waiting_time+
-                         sqrtage+
+                         sqrt_age+
                          is_female+
                          scholarship+
                          sms_recieved+
                          poverty+
                          region, data = df.train, na.action=na.omit) 
 plot(noshow.RF)
-noshow.RF
-importance(noshow.RF)
+#importance(noshow.RF)
 varImpPlot(noshow.RF)
 ```
 
@@ -198,15 +202,15 @@ varImpPlot(noshow.RF)
 ```{r}
 #install.packages("gbm",repos = "http://cran.us.r-project.org")
 library("gbm")
-set.seed(7) #GBM includes random selection. Repeat same seed to repeat the RF
+set.seed(7) #same seed to repeat the RF
 no_show.gbm <- gbm (no_show ~ week_day+
-                         waiting_time+
-                         age+
+                         log_waiting_time+
+                         sqrt_age+
                          is_female+
                          scholarship+
                          sms_recieved+
                          poverty+
-                         region,data = df.train, n.trees = 1000, interaction.depth = 4, shrinkage = 0.2, verbose = F) #gbm distribution is gaussian for regression and bernoulli for binary classification
+                         region ,data = df.train, n.trees = 1000, interaction.depth = 4, shrinkage = 0.2, verbose = F)
 no_show.gbm
 summary(no_show.gbm)
 ```
@@ -214,56 +218,101 @@ summary(no_show.gbm)
 
 ### Model evaluation
 ```{r}
-# Global threshold decleration
-threshold = 0.5
+# converting the test for log and sqrt
+df.test$log_waiting_time <- log(df.test$waiting_time+1)
+df.test$sqrt_age <- sqrt(df.test$age)
 ```
 
 #### LM
 ```{r}
-lm_y_est <- predict(lm.model2, df.test)
-lm_res <- lm_y_est - df.test$price_log
-hist(lm_res)
-L1 = sum(abs(lm_res))/length(lm_res)
-Res_sq <- lm_res^2
-RSS <- sum(Res_sq)
-MSE <- RSS/length(Res_sq)
-RMSE <- sqrt(MSE)
-RMSE
+threshold = 0.6
+fitted.lm.results <- predict(logit_model,df.test,type='response')
+lm.prediction <- ifelse(fitted.lm.results > threshold,1,0)
+lm.accuracy <- mean(lm.prediction == df.test$no_show)
+lm.accuracy
+```
+```{r}
+#install.packages("caret",repos = "http://cran.us.r-project.org") 
+#install.packages("e1071",repos = "http://cran.us.r-project.org")
+library("caret")
+library("e1071")
+confusionMatrix(data = lm.prediction, reference =  df.test$no_show)
+```
+
+```{r}
+cross.table <- table(lm.prediction, df.test$no_show)
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+paste("accuracy -",accuracy)
+paste("precision -",precision)
+paste("recall -",recall)
+```
+
+```{r}
+#install.packages("pROC",repos = "http://cran.us.r-project.org")
+library("pROC")
+plot(roc(df.test$no_show, fitted.lm.results, direction="<"), col="blue", main="Left ROC curve")
 ```
 
 #### CART
 ```{r}
-CART.results = predict(Wine.CART, df.test, n.trees = 1000)
-summary(CART.results)
-CART.prediction = ifelse(CART.results > threshold)
-summary(CART.prediction)
+threshold = 0.6
+fitted.cart.results <- predict(noshow.CART,df.test)
+summary(fitted.cart.results)
 
-Residual <- CART.results - df.test$price_log
-Res_sq <- Residual * Residual
-RSS <- sum(Res_sq)
-MSE <- mean(Res_sq)
-RMSE <- sqrt(MSE)
-Total_res <- CART.results - mean(df.test$price_log)
-TSS <- sum(Total_res*Total_res)
-R2 <- 1- RSS/TSS
-R2
+cart.prediction <- ifelse(fitted.cart.results > threshold,1,0)
+summary(cart.prediction)
+```
+
+```{r}
+cross.table <- table(cart.prediction, df.test$no_show)
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+paste("accuracy -",accuracy)
+paste("precision -",precision)
+paste("recall -",recall)
 ```
 
 #### RF
 ```{r}
-RF.results = predict(Wine.RF, df.test)
-summary(RF.results)
-RF.prediction = ifelse(RF.results > threshold,1,0)
-summary(RF.prediction)
+threshold <- 0.6
+fitted.rf.results <- predict(noshow.RF,df.test)
+summary(fitted.rf.results)
+rf.prediction <- ifelse(fitted.rf.results > threshold,1,0)
+summary(rf.prediction)
 
-# CROSS TABLE INSERTION
+cross.table <- table(rf.prediction, df.test$no_show)
+cross.table
+```
+
+```{r}
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+paste("accuracy -",accuracy)
+paste("precision -",precision)
+paste("recall -",recall)
 ```
 
 #### GBM
 ```{r}
-GBM.results = predict(Wine.gbm, df.test, n.trees = 1000)
-summary(GBM.results)
-GBM.prediction = ifelse(GBM.results > threshold,1,0)
-summary(GBM.prediction)
+threshold <- 0.6
+fitted.gbm.results <- predict(no_show.gbm,df.test, n.trees = 1000)
+summary(fitted.gbm.results)
+gbm.prediction <- ifelse(fitted.gbm.results > threshold,1,0)
+summary(gbm.prediction)
+```
+
+```{r}
+cross.table <- table(gbm.prediction, df.test$no_show)
+cross.table
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+paste("accuracy -",accuracy)
+paste("precision -",precision)
+paste("recall -",recall)
 ```
 
