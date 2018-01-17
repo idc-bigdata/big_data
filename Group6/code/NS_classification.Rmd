@@ -4,7 +4,9 @@ title: "Business Data analytics Group 6- Show/No Show classification"
 
 ### Import data and set objective
 ```{r}
-#library(knitr)
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load("knitr")
+
 knitr::opts_knit$set(root.dir = "~/source/big_data/Group6/datasets")
 df.train <- read.csv("../datasets/NS.TRAIN.csv")
 df.test <- read.csv("../datasets/NS.TEST.csv")
@@ -101,17 +103,17 @@ plot(eda_week_day, eda_week_day$x, type="l", main="No show prob vs. week_day")
 ```
 ```{r}
 eda_age<-aggregate(df.train$no_show, by=list(sqrt(df.train$age)), FUN=mean)
-plot(eda_age, eda_age$x, type="p", main="No show prob vs. sqrt age")
+plot(eda_age, eda_age$x, type="p",  main="No show prob vs. sqrt age")
 ```
 
 ```{r}
 eda_scholarship<-aggregate(df.train$no_show, by=list((df.train$scholarship)), FUN=mean)
-plot(eda_scholarship, eda_scholarship$x, type="l", main="No show prob vs. scholarship")
+plot(eda_scholarship, eda_scholarship$x, type="h", col = c("light blue", "blue"), lwd = 100, ylim = c(0.1,0.4), main="No show prob vs. scholarship")
 ```
 
 ```{r}
 eda_sms_recieved<-aggregate(df.train$no_show, by=list((df.train$sms_recieved)), FUN=mean)
-plot(eda_sms_recieved, eda_sms_recieved$x, type="l", main="No show prob vs. sms_recieved")
+plot(eda_sms_recieved, eda_sms_recieved$x, type="h", col = c("light blue", "blue"), lwd = 100, ylim = c(0.1,0.4), main="No show prob vs. sms_recieved")
 ```
 #### Low probability graphs
 ```{r}
@@ -143,18 +145,17 @@ plot(eda_ever_before, eda_ever_before$x, type="l", main="No show prob vs. ever_b
 ```
 
 ### Modeling
+#### Logistic Model
 ```{r}
-# converting to log and sqrt
-df.train$log_waiting_time <- log(df.train$waiting_time+1)
-df.train$sqrt_age <- sqrt(df.train$age)
-```
-
-#### LM
-```{r}
-logit_model <- glm(no_show ~ sqrt_age+
-                         log_waiting_time+
+logit_model <- glm(no_show ~ (age)^4+
+                         log(waiting_time+1)+
                          scholarship+
                          sms_recieved+
+                         hipertension+
+                         diabetes+
+                         alcoholism+
+                         handcap+
+                         poverty+
                          region, data = df.train, family = binomial)
 summary (logit_model)
 plot(logit_model)
@@ -163,10 +164,10 @@ plot(logit_model)
 
 #### CART
 ```{r}
-library("tree")
+pacman::p_load("tree")
 noshow.CART <- tree(no_show ~ week_day+
-                      log_waiting_time+
-                      sqrt_age+
+                      waiting_time+
+                      age+
                       is_female+
                       scholarship+
                       hipertension+
@@ -183,16 +184,17 @@ summary(noshow.CART)
 
 #### RF
 ```{r}
-library("randomForest")
+pacman::p_load("randomForest")
 set.seed(7)
-noshow.RF <- randomForest(no_show ~ week_day+
-                         log_waiting_time+
-                         sqrt_age+
-                         is_female+
-                         scholarship+
-                         sms_recieved+
-                         poverty+
-                         region, data = df.train, na.action=na.omit) 
+noshow.RF <- randomForest(no_show ~ week_day
+                          +waiting_time
+                          +age
+                          +is_female
+                          +scholarship
+                          +sms_recieved
+                          +poverty
+                          +region
+                          , data = df.train, na.action=na.omit, type="classification", ntree=100) 
 plot(noshow.RF)
 #importance(noshow.RF)
 varImpPlot(noshow.RF)
@@ -200,12 +202,13 @@ varImpPlot(noshow.RF)
 
 #### GBM
 ```{r}
-#install.packages("gbm",repos = "http://cran.us.r-project.org")
-library("gbm")
+# install.packages("gbm",repos = "http://cran.us.r-project.org")
+#library("gbm")
+pacman::p_load("gbm")
 set.seed(7) #same seed to repeat the RF
 no_show.gbm <- gbm (no_show ~ week_day+
-                         log_waiting_time+
-                         sqrt_age+
+                         waiting_time+
+                         age+
                          is_female+
                          scholarship+
                          sms_recieved+
@@ -217,13 +220,7 @@ summary(no_show.gbm)
 
 
 ### Model evaluation
-```{r}
-# converting the test for log and sqrt
-df.test$log_waiting_time <- log(df.test$waiting_time+1)
-df.test$sqrt_age <- sqrt(df.test$age)
-```
-
-#### LM
+#### Logistic Model
 ```{r}
 threshold = 0.6
 fitted.lm.results <- predict(logit_model,df.test,type='response')
@@ -233,25 +230,36 @@ lm.accuracy
 ```
 ```{r}
 #install.packages("caret",repos = "http://cran.us.r-project.org") 
+#library("caret")
 #install.packages("e1071",repos = "http://cran.us.r-project.org")
-library("caret")
-library("e1071")
+#library("e1071")
+pacman::p_load("caret")
+pacman::p_load("e1071")
 confusionMatrix(data = lm.prediction, reference =  df.test$no_show)
 ```
 
 ```{r}
 cross.table <- table(lm.prediction, df.test$no_show)
+
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
+
 accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
 precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
 recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
-paste("accuracy -",accuracy)
-paste("precision -",precision)
-paste("recall -",recall)
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
 ```
 
 ```{r}
 #install.packages("pROC",repos = "http://cran.us.r-project.org")
-library("pROC")
+pacman::p_load("pROC")
 plot(roc(df.test$no_show, fitted.lm.results, direction="<"), col="blue", main="Left ROC curve")
 ```
 
@@ -260,8 +268,12 @@ plot(roc(df.test$no_show, fitted.lm.results, direction="<"), col="blue", main="L
 <<<<<<< HEAD
 threshold = 0.3
 =======
+<<<<<<< HEAD
+threshold = 0.3
+=======
 threshold = 0.6
 >>>>>>> 4b865442aa082d596a80744b97f606f45d5577c7
+>>>>>>> 267c5cba95fa80cf8cacbb09a531c7f4ee3af05e
 fitted.cart.results <- predict(noshow.CART,df.test)
 summary(fitted.cart.results)
 
@@ -271,33 +283,49 @@ summary(cart.prediction)
 
 ```{r}
 cross.table <- table(cart.prediction, df.test$no_show)
+
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
+
 accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
 precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
 recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
-paste("accuracy -",accuracy)
-paste("precision -",precision)
-paste("recall -",recall)
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
 ```
 
 #### RF
 ```{r}
-threshold <- 0.6
+threshold <- 0.5
 fitted.rf.results <- predict(noshow.RF,df.test)
 summary(fitted.rf.results)
 rf.prediction <- ifelse(fitted.rf.results > threshold,1,0)
 summary(rf.prediction)
-
-cross.table <- table(rf.prediction, df.test$no_show)
-cross.table
 ```
 
 ```{r}
+cross.table <- table(rf.prediction, df.test$no_show)
+
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
+
 accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
 precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
 recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
-paste("accuracy -",accuracy)
-paste("precision -",precision)
-paste("recall -",recall)
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
 ```
 
 #### GBM
@@ -311,12 +339,19 @@ summary(gbm.prediction)
 
 ```{r}
 cross.table <- table(gbm.prediction, df.test$no_show)
-cross.table
+
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
 accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
 precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
 recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
-paste("accuracy -",accuracy)
-paste("precision -",precision)
-paste("recall -",recall)
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
 ```
 
