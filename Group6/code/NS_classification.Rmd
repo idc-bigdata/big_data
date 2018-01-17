@@ -265,15 +265,7 @@ plot(roc(df.test$no_show, fitted.lm.results, direction="<"), col="blue", main="L
 
 #### CART
 ```{r}
-<<<<<<< HEAD
 threshold = 0.3
-=======
-<<<<<<< HEAD
-threshold = 0.3
-=======
-threshold = 0.6
->>>>>>> 4b865442aa082d596a80744b97f606f45d5577c7
->>>>>>> 267c5cba95fa80cf8cacbb09a531c7f4ee3af05e
 fitted.cart.results <- predict(noshow.CART,df.test)
 summary(fitted.cart.results)
 
