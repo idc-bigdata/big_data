@@ -11,18 +11,19 @@ knitr::opts_knit$set(root.dir = "~/source/big_data/Group6/datasets")
 df.train <- read.csv("../datasets/NS.TRAIN.csv")
 df.test <- read.csv("../datasets/NS.TEST.csv")
 ```
-Importing the DF
+Importing the splitted DFs.
 
 ```{r}
 dim(df.train)
 table(is.na(df.train))
 ```
+The train DF holds 88416x35 rows and attributes(columns)
+
 ##### Dimantion of the DataFrame and missing values
 
 ```{r}
 summary(df.train)
 ```
-Display the summarize and define a business target
 
 ##### Business question
 1. Is it possible to predict no show to Dr. appointments?
@@ -65,7 +66,7 @@ scholarship | -
 ```{r}
 sapply(df.train, function(x) sum(is.na(x)))
 ```
-number of missing values per column
+Making sure that the number of missing values per column is 0
 
 ##### which columns to predict
 Column to predict is no_show
@@ -79,42 +80,67 @@ df = na.omit(df.train)
 par(mfrow=c(2,4));
 hist(df$week_day, main="week_day", breaks = 10)
 hist(log(df$waiting_time+1), main="log waiting_time", breaks = 10)
-hist(sqrt(df$age), main="sqrt age", breaks = 10)
+hist(df$age, main="sqrt age", breaks = 10)
 hist(df$poverty, main="poverty", breaks = 10)
 hist(df$region, main="region", breaks = 10)
 hist(log(df$same_day+1), main="log same_day", breaks = 10)
 hist(log(df$week_before+1), main="log week_before", breaks = 10)
 hist(log(df$ever_before+1), main="log ever_before", breaks = 10)
 ```
+before handling the models, we wanted to see the data distribution foreach attribute.
+Right from the start we could see that some distributions will require some transofrmation -  log for waiting_time and sqrt for age.
 
+Now we can start plotting the data and look for possible correlations for the no show probability
 ### EDA
 #### High probability graphs 
 ```{r}
 # looking for no_show frequencies over waiting time
-eda_waiting_time<-aggregate(df.train$no_show, by=list(log(df.train$waiting_time+1)), FUN=mean)
+eda_waiting_time<-aggregate(df.train$no_show, by=list(log(df.train$waiting_time)), FUN=mean)
 names(eda_waiting_time)=c("waiting time","No show prob")
 plot(eda_waiting_time, eda_waiting_time$x, type="p", main="No show prob vs. log waiting time")
 ```
 We can identify a group of confident shows around 100 waiting time (days), or 4.5 in log, whereas the majority is around probability of 0.3
+this can tell us right from the start that the longer you wait, the less probability you'll miss from the appointment.
+
+Now, same thing for week days
 
 ```{r}
 eda_week_day<-aggregate(df.train$no_show, by=list(df.train$week_day), FUN=mean)
 plot(eda_week_day, eda_week_day$x, type="l", main="No show prob vs. week_day")
 ```
+Again, although we have only few occurences in the weekend, we can see that on Saturday(6) the probability for no show goes up!
+se we can learn that near the end of the week, ther's a probability for no show higer than the weekdays
+
+Now for age
 ```{r}
-eda_age<-aggregate(df.train$no_show, by=list(sqrt(df.train$age)), FUN=mean)
+eda_age<-aggregate(df.train$no_show, by=list((df.train$age)), FUN=mean)
 plot(eda_age, eda_age$x, type="p",  main="No show prob vs. sqrt age")
+
+under18 <- df.train[df.train$age<=18,]
+eda_under18<-aggregate(under18$no_show, by=list((under18$age)^2), FUN=mean)
+plot(eda_under18, eda_under18$x, type="l",  main="No show prob vs.age < 18")
+
+under18over60 <- df.train[df.train$age>=18 & df.train$age<=60,]
+eda_under18over60<-aggregate(under18over60$no_show, by=list((under18over60$age)^2), FUN=mean)
+plot(eda_under18over60, eda_under18over60$x, type="l",  main="No show prob vs. 60 < age > 18")
 ```
+Note for the linearity from age 0 to ~60. Altough the problem is a classic classification, we might use this finding helpful for later model split (ensemble)
+Moreover, can can learn that youth may have greater probability to no show, and the greater the age, the less no show probability you have.
 
 ```{r}
 eda_scholarship<-aggregate(df.train$no_show, by=list((df.train$scholarship)), FUN=mean)
 plot(eda_scholarship, eda_scholarship$x, type="h", col = c("light blue", "blue"), lwd = 100, ylim = c(0.1,0.4), main="No show prob vs. scholarship")
 ```
+In terms of scholarship, we see that the probability for no show / show is more of the less equal (delta of 0.04%)
+We're noting this one as a low correlation
 
 ```{r}
 eda_sms_recieved<-aggregate(df.train$no_show, by=list((df.train$sms_recieved)), FUN=mean)
 plot(eda_sms_recieved, eda_sms_recieved$x, type="h", col = c("light blue", "blue"), lwd = 100, ylim = c(0.1,0.4), main="No show prob vs. sms_recieved")
 ```
+In terms of SMS, we have a more adhere probability that once SMS is recieved, more likly you'll be missing from the appointment .. weired :/
+
+And here is the list for the least correlative attributes
 #### Low probability graphs
 ```{r}
 par(mfrow=c(2,4))
@@ -143,18 +169,21 @@ eda_ever_before<-aggregate(df.train$no_show, by=list((df.train$ever_before)), FU
 plot(eda_ever_before, eda_ever_before$x, type="l", main="No show prob vs. ever_before", ylim=c(0,1))
      
 ```
+The major jumps in the graphs are just outliers with 1 or 3 occurences that don't worth investigating.
 
 ### Modeling
+
+After we looked on the data, let's start building some models and start look for a proper model to our problem.
+
 #### Logistic Model
 ```{r}
-logit_model <- glm(no_show ~ (age)^4+
+logit_model <- glm(no_show ~ age+
                          log(waiting_time+1)+
                          scholarship+
                          sms_recieved+
                          hipertension+
                          diabetes+
                          alcoholism+
-                         handcap+
                          poverty+
                          region, data = df.train, family = binomial)
 summary (logit_model)
@@ -166,7 +195,7 @@ plot(logit_model)
 ```{r}
 pacman::p_load("tree")
 noshow.CART <- tree(no_show ~ week_day+
-                      waiting_time+
+                      log(waiting_time+1)+
                       age+
                       is_female+
                       scholarship+
@@ -345,5 +374,66 @@ paste("Accuracy -",accuracy)
 paste("Precision -",precision)
 paste("Recall -",recall)
 paste("F1 -",f1)
+```
+
+#### Ensemble
+```{r}
+#Training the random forest model
+set.seed(7)
+model_rf <- randomForest(no_show ~ week_day
+                          +waiting_time
+                          +age
+                          +is_female
+                          +scholarship
+                          +sms_recieved
+                          +poverty
+                          +region
+                          , data = df.train, na.action=na.omit, type="classification", ntree=100)  
+
+#Training the CART model
+model_cart<-tree(no_show ~ week_day+
+                      log(waiting_time+1)+
+                      age+
+                      is_female+
+                      scholarship+
+                      hipertension+
+                      diabetes+
+                      alcoholism+
+                      handcap+
+                      sms_recieved+
+                      poverty+
+                      region ,data = df.train)
+
+#Training the logistic regression model
+model_lr<-glm(no_show ~ sqrt(age)+
+                         log(waiting_time+1)+
+                         scholarship+
+                         sms_recieved+
+                         hipertension+
+                         diabetes+
+                         alcoholism+
+                         poverty+
+                         region, data = df.train, family = binomial)
+```
+
+```{r}
+#Predicting the out of fold prediction probabilities for training data
+df.train$OOF_pred_rf<-model_rf$pred
+df.train$OOF_pred_cart<-model_cart$pred
+df.train$OOF_pred_lr<-model_lr$pred
+df.train
+
+#Predicting probabilities for the test data
+df.test$OOF_pred_rf<-predict(model_rf,df.test)
+df.test$OOF_pred_cart<-predict(model_cart,df.test)
+df.test$OOF_pred_lr<-predict(model_lr,df.test)
+```
+
+```{r}
+#Predictors for top layer models 
+predictors_top<-c('OOF_pred_rf','OOF_pred_cart','OOF_pred_lr') 
+
+#GBM as top layer model 
+model_gbm<- gbm (no_show ~ OOF_pred_rf,data = df.train, n.trees = 1000, interaction.depth = 4, shrinkage = 0.2, verbose = F) 
 ```
 

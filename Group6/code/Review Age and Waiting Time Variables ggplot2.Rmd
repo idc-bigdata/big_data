@@ -1,0 +1,130 @@
+---
+title: "Business Data analytics Group 6 - Review Age and Waiting Time Variables"
+output: word_document
+---
+using ggplot2
+For more information visit <https://rstudio-pubs-static.s3.amazonaws.com/228019_f0c39e05758a4a51b435b19dbd321c23.html>
+
+```{r setup, include=FALSE}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load("knitr")
+pacman::p_load("ggplot2")
+
+root_dir <- "~/source/big_data/Group6/datasets/"
+knitr::opts_knit$set(root.dir = root_dir)
+```
+
+# Import data and set objective
+
+```{r}
+df.train <- read.csv("NS.TRAIN.csv")
+df.test <- read.csv("NS.TEST.csv")
+```
+
+## Waiting Time Variable
+### Review waiting time in the test data
+
+```{r}
+stripchart(df.train$waiting_time, method = "jitter",  vertical = TRUE, col ="blue",cex = 0.75, pch= 1)
+
+```
+
+### Split data by waiting time ranges
+
+
+```{r, include=FALSE}
+
+draw_waiting_days_gg <- function(bottom, top)
+{
+# limit the wayting time range
+df.train_limit <- df.train[df.train$waiting_time>=bottom & df.train$waiting_time<top ,]
+
+# calculate probabilties
+eda_waiting_time_mean <-aggregate(df.train_limit$no_show, by=list((df.train_limit$waiting_time)), FUN=mean)
+colnames(eda_waiting_time_mean) <- c("days","prob")
+
+# calculate  number of observations
+eda_waiting_time_count <-aggregate(df.train_limit$no_show, by=list((df.train_limit$waiting_time)), FUN=length)
+colnames(eda_waiting_time_count) <- c("days","count")
+
+# merge to single data frame
+m <- merge(eda_waiting_time_mean, eda_waiting_time_count, by="days" )
+
+#count total number observations
+obs <- nrow(df.train_limit)
+
+# plot!
+ggplot(m, aes(days,prob))+        #plot rea
+  geom_jitter(aes(size = count))+   #add point with count as size
+    geom_smooth(method = "lm")+       #add trendline and confidance area
+      labs(title="No-Show Probabilty vs. Waiting Time",
+            subtitle= paste0(bottom,"-",top," days (", obs, " observations)"),
+              y="Probabilty", 
+                x="Waitnig Days"
+          ) # add lables
+}
+```
+
+```{r}
+#Draw
+draw_waiting_days_gg(0,1)
+draw_waiting_days_gg(1,25)
+draw_waiting_days_gg(25,90)
+draw_waiting_days_gg(90,135)
+draw_waiting_days_gg(135,999)
+
+```
+
+
+
+## Age Variable
+### Review ages in the test data
+
+```{r}
+stripchart(df.train$age, method = "jitter",  vertical = TRUE, col ="blue",cex = 0.75, pch= 1)
+```
+
+### Split data by age ranges
+
+```{r, include=FALSE}
+draw_age_gg <- function(bottom, top)
+{
+# limit the wayting time range
+df.train_limit <- df.train[df.train$age>=bottom & df.train$age<top ,]
+
+# calculate probabilties
+eda_age_mean <-aggregate(df.train_limit$no_show, by=list((df.train_limit$age)), FUN=mean)
+colnames(eda_age_mean) <- c("age","prob")
+
+# calculate  number of observations
+eda_age_count <-aggregate(df.train_limit$no_show, by=list((df.train_limit$age)), FUN=length)
+colnames(eda_age_count) <- c("age","count")
+
+# merge to single data frame
+m <- merge(eda_age_mean, eda_age_count, by="age" )
+
+#count total number observations
+obs <- nrow(df.train_limit)
+
+# plot!
+ggplot(m, aes(age,prob))+        #plot rea
+  geom_jitter(aes(size = count))+   #add point with count as size
+    geom_smooth(method = "lm")+       #add trendline and confidance area
+      labs(title="No-Show Probabilty vs. Age",
+            subtitle= paste0("Age range: ",bottom,"-",top," (", obs, " observations)"),
+              y="Probabilty", 
+                x="Age"
+          ) # add lables
+}
+```
+
+```{r}
+#Draw
+draw_age_gg(0,18)
+draw_age_gg(18,65)
+draw_age_gg(65,85)
+draw_age_gg(85,999)
+```
+
+
+
