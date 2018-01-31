@@ -47,11 +47,11 @@ dim(df.train.balanced[df.train.balanced$no_show==1,])
 stripchart(df.train.balanced$waiting_time, method = "jitter",  vertical = TRUE, col ="blue",cex = 0.75, pch= 1)
 
 ```
+We can see that we have some outliers in the waiting time feature. Hence, we'll compress the over 90 days waiting tome to group of 90 days waiting time.
 
-
-#### remove outliers
-```{r}
+```{r, include=FALSE}
 df.train.balanced$waiting_time_orig <- df.train.balanced$waiting_time
+df.test$waiting_time_orig <- df.test$waiting_time
 df.train.balanced$waiting_time[df.train.balanced$waiting_time>90] <- 90
 ```
 
@@ -149,12 +149,13 @@ df.test$prob_waiting_time_full <- prob_calc_waiting_time_full(df.test$waiting_ti
 #### Age Variable
 #### Review ages in the test data
 
+Outliers for Age feature. we can see that we have several ages that are beyond 85 y.o and the number of occurrence is not high, hence, we'll compress them to the age of 85
 ```{r}
 stripchart(df.train.balanced$age, method = "jitter",  vertical = TRUE, col ="blue",cex = 0.75, pch= 1)
 ```
 
 #### remove outliers
-```{r}
+```{r, include=FALSE}
 df.train.balanced$age_orig <- df.train.balanced$age
 df.train.balanced$age[df.train.balanced$age>85] <- 85
 ```
@@ -266,9 +267,9 @@ logit_model <- glm(no_show ~ age_scaled+
                          sms_recieved, data = df.train.balanced, family = binomial)
 summary (logit_model)
 plot(logit_model)
-
-logit_model_full <- glm(no_show ~ prob_age_full+
-                         prob_waiting_time_full, data = df.train, family = binomial)
+# 
+# logit_model_full <- glm(no_show ~ prob_age_full+
+#                          prob_waiting_time_full, data = df.train, family = binomial)
 ```
 
 
@@ -292,13 +293,13 @@ text(noshow.CART, pretty = 0, cex=0.5)
 summary(noshow.CART)
 ```
 
-#### RF
+#### Random Forest
 ```{r}
 pacman::p_load("randomForest")
 set.seed(7)
 noshow.RF <- randomForest(no_show ~ week_day
-                          +waiting_time_scaled
-                          +age_scaled
+                          +waiting_time
+                          +age
                           +is_female
                           +scholarship
                           +sms_recieved
@@ -310,15 +311,15 @@ plot(noshow.RF)
 varImpPlot(noshow.RF)
 ```
 
-#### GBM
+#### Gradient Boosting Machine
 ```{r}
 # install.packages("gbm",repos = "http://cran.us.r-project.org")
 #library("gbm")
 pacman::p_load("gbm")
 set.seed(7) #same seed to repeat the RF
 no_show.gbm <- gbm (no_show ~ week_day+
-                         waiting_time_scaled+
-                         age_scaled+
+                         waiting_time+
+                         age+
                          is_female+
                          scholarship+
                          sms_recieved+
@@ -434,7 +435,7 @@ paste("F1 -",f1)
 
 #### GBM
 ```{r}
-threshold <- 0.5
+threshold <- 0.6
 fitted.gbm.results <- predict(no_show.gbm,df.test, n.trees = 1000)
 summary(fitted.gbm.results)
 gbm.prediction <- ifelse(fitted.gbm.results > threshold,1,0)
@@ -462,10 +463,10 @@ paste("F1 -",f1)
 #### Conclusion 
 |&nbsp;| **Accuracy**|**Precision**|**Recall**|**F1**|
 |:----|----------:|----------:|----------:|----------:|
-|GLM|0.696539244514816|0.315916398713826|0.444771389769126|0.369430344049633|
+|GLM|0.676950916082334|0.31868424557198|0.541647804436397|0.40127441938459|
 |CART|0.653472065143633|0.316711895070104|**0.633997283838841**|**0.42240989292716**|
-|RF|0.702510744175526|**0.337987987987988**|0.509506564056134|0.406391045315039|
-|GBM|**0.715403754806605**|0.342684360826474|0.461747397012223|0.393404686144056|
+|RF|0.698303551232753|0.341232896036112|0.54753282028067|0.420439732336838|
+|GBM|**0.728161049536304**|**0.357819481680071**|0.453146220009054|0.399880155797463|
 
 #### Ensemble method - Majority vote
 

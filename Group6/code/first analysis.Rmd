@@ -421,7 +421,6 @@ model_lr<-glm(no_show ~ sqrt(age)+
 df.train$OOF_pred_rf<-model_rf$pred
 df.train$OOF_pred_cart<-model_cart$pred
 df.train$OOF_pred_lr<-model_lr$pred
-df.train
 
 #Predicting probabilities for the test data
 df.test$OOF_pred_rf<-predict(model_rf,df.test)
