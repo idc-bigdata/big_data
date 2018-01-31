@@ -1,0 +1,493 @@
+---
+title: "Business Data analytics Group 6- Show/No Show classification"
+---
+
+### Import data and set objective
+```{r}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load("knitr")
+
+knitr::opts_knit$set(root.dir = "~/source/big_data/Group6/datasets")
+df.train <- read.csv("../datasets/NS.TRAIN.csv")
+df.test <- read.csv("../datasets/NS.TEST.csv")
+```
+Importing the splitted DFs.
+
+```{r}
+dim(df.train)
+table(is.na(df.train))
+```
+The train DF holds 88416x35 rows and attributes(columns)
+
+##### Split Train to 50/50 show/no show
+
+```{r}
+dim(df.train[df.train$no_show==0,])
+dim(df.train[df.train$no_show==1,])
+```
+We're holding 70K shows and 17K no shows. this will cause the model to be baised.. and we don't want that!
+
+```{r}
+df.no_show <- sample(df.train[df.train$no_show==1,])
+df.show <- sample(df.train[df.train$no_show==0,])
+df.train.balanced <- rbind(df.no_show, df.show[1:17896,])
+dim(df.train.balanced)
+```
+Now we're having a balanced DF with 50%/50% shows/no shows
+```{r}
+dim(df.train.balanced[df.train.balanced$no_show==0,])
+dim(df.train.balanced[df.train.balanced$no_show==1,])
+```
+
+### EDA
+#### Waiting Time Variable
+#### Review waiting time in the test data
+
+```{r}
+stripchart(df.train.balanced$waiting_time, method = "jitter",  vertical = TRUE, col ="blue",cex = 0.75, pch= 1)
+
+```
+
+
+#### remove outliers
+```{r}
+df.train.balanced$waiting_time_orig <- df.train.balanced$waiting_time
+df.train.balanced$waiting_time[df.train.balanced$waiting_time>90] <- 90
+```
+
+#### Split data by waiting time ranges
+```{r, include=FALSE}
+draw_waiting_days_gg <- function(bottom, top)
+{
+# limit the wayting time range
+df.train.balanced_limit <- df.train.balanced[df.train.balanced$waiting_time>=bottom & df.train.balanced$waiting_time<top ,]
+
+# calculate probabilties
+eda_waiting_time_mean <-aggregate(df.train.balanced_limit$no_show, by=list((df.train.balanced_limit$waiting_time)), FUN=mean)
+colnames(eda_waiting_time_mean) <- c("days","prob")
+
+# calculate  number of observations
+eda_waiting_time_count <-aggregate(df.train.balanced_limit$no_show, by=list((df.train.balanced_limit$waiting_time)), FUN=length)
+colnames(eda_waiting_time_count) <- c("days","count")
+
+# merge to single data frame
+m <- merge(eda_waiting_time_mean, eda_waiting_time_count, by="days" )
+
+#count total number observations
+obs <- nrow(df.train.balanced_limit)
+
+# model
+mod <- lm(prob ~ days, data = m)
+if (is.na(coef(mod)[2]) == TRUE)
+{eq <- paste0("X = ",coef(mod)[1])} else {
+  if (coef(mod)[2] > 0) {
+  eq <- paste0("X = ",coef(mod)[1]," + ",coef(mod)[2]," * Y")
+  } else {
+  eq <- paste0("X = ",coef(mod)[1]," - ",abs(coef(mod)[2])," * Y")    
+}}
+
+print(eq)
+
+# plot!
+ggplot(m, aes(days,prob))+        #plot rea
+  geom_jitter(aes(size = count))+   #add point with count as size
+    geom_smooth(method = "lm")+       #add trendline and confidance area
+      labs(title="No-Show Probabilty vs. Waiting Time",
+            subtitle= paste0(bottom,"-",top," days (", obs, " observations)  ",eq),
+              y="Probabilty", 
+                x="Waitnig Days"
+          ) # add lables
+
+}
+```
+
+```{r}
+#Draw
+#install.packages("ggplot")
+library("ggplot2")
+draw_waiting_days_gg(0,1)
+draw_waiting_days_gg(1,25)
+draw_waiting_days_gg(25,999)
+# draw_waiting_days_gg(25,90)
+# draw_waiting_days_gg(90,135)
+# draw_waiting_days_gg(135,999)
+
+```
+
+```{r}
+prob_calc_waiting_time_full <- function(days)
+{
+  if (days == 0) {
+    0.0456610631531122
+    } else if  (days >=1 & days < 25) {
+    0.230756030998989 + (0.0055475902127787 * days)
+    } else {
+    0.36577378261591 - (0.000851467844045281 * days)
+    }
+}
+
+prob_calc_waiting_time <- function(days)
+{
+  if (days == 0) {
+    0.158678245178753
+    } else if  (days >=1 & days < 25) {
+    0.546023559071751 + (0.00619923231024794 * days)
+    } else {
+    0.685684913764639 - (0.000608071730208754 * days)
+    }
+}
+
+
+df.train.balanced$prob_waiting_time <- prob_calc_waiting_time(df.train.balanced$waiting_time)
+df.test$prob_waiting_time <- prob_calc_waiting_time(df.test$waiting_time)
+
+df.train$prob_waiting_time_full <- prob_calc_waiting_time_full(df.train$waiting_time)
+df.test$prob_waiting_time_full <- prob_calc_waiting_time_full(df.test$waiting_time)
+```
+
+
+#### Age Variable
+#### Review ages in the test data
+
+```{r}
+stripchart(df.train.balanced$age, method = "jitter",  vertical = TRUE, col ="blue",cex = 0.75, pch= 1)
+```
+
+#### remove outliers
+```{r}
+df.train.balanced$age_orig <- df.train.balanced$age
+df.train.balanced$age[df.train.balanced$age>85] <- 85
+```
+#### Split data by age ranges
+
+```{r, include=FALSE}
+draw_age_gg <- function(bottom, top)
+{
+  
+# bottom <- 18
+# top <- 65
+# limit the wayting time range
+df.train.balanced_limit <- df.train.balanced[df.train.balanced$age>=bottom & df.train.balanced$age<top ,]
+
+# calculate probabilties
+eda_age_mean <-aggregate(df.train.balanced_limit$no_show, by=list((df.train.balanced_limit$age)), FUN=mean)
+colnames(eda_age_mean) <- c("age","prob")
+
+# calculate  number of observations
+eda_age_count <-aggregate(df.train.balanced_limit$no_show, by=list((df.train.balanced_limit$age)), FUN=length)
+colnames(eda_age_count) <- c("age","count")
+
+# merge to single data frame
+m <- merge(eda_age_mean, eda_age_count, by="age" )
+
+#count total number observations
+obs <- nrow(df.train.balanced_limit)
+
+# model
+mod <- lm(prob ~ age, data = m)
+
+if (is.na(coef(mod)[2]) == TRUE)
+{eq <- paste0("X = ",coef(mod)[1])} else {
+  if (coef(mod)[2] > 0) {
+  eq <- paste0("X = ",coef(mod)[1]," + ",coef(mod)[2]," * Y")
+  } else {
+  eq <- paste0("X = ",coef(mod)[1]," - ",abs(coef(mod)[2])," * Y")    
+}}
+print(eq)
+# plot!
+ggplot(m, aes(age,prob))+        #plot rea
+  geom_jitter(aes(size = count))+   #add point with count as size
+    geom_smooth(method = "lm")+       #add trendline and confidance area
+      labs(title="No-Show Probabilty vs. Age",
+            subtitle= paste0("Age range: ",bottom,"-",top," (", obs, " observations) ",eq),
+              y="Probabilty", 
+                x="Age"
+          ) # add lables
+
+}
+```
+
+```{r}
+#Draw
+draw_age_gg(0,18)
+draw_age_gg(18,65)
+draw_age_gg(65,999)
+# draw_age_gg(65,85)
+# draw_age_gg(85,999)
+```
+
+```{r}
+prob_calc_age_full <- function(age)
+{
+  if (age<18) {
+    0.173782901236029 + 0.00626848946448816 * age
+    } else if  (days >=18 & days < 65) {
+    0.306786971869277 - 0.00244909445437991 * age
+    } else {
+    0.0910425992387074 + 0.000864371687591228 * age
+    }
+}
+
+prob_calc_age <- function(age)
+{
+  if (age<18) {
+    0.462765564615094 + 0.00801267576660286 * age
+    } else if  (days >=18 & days < 65) {
+    0.655580418512068 - 0.0037080855647871 * age
+    } else {
+    0.411559081661147 + 0.00008191622771923 * age
+    }
+}
+
+df.train.balanced$prob_age <- prob_calc_waiting_time(df.train.balanced$age)
+df.test$prob_age <- prob_calc_waiting_time(df.test$age)
+
+df.train$prob_age_full <- prob_calc_waiting_time_full(df.train$age)
+df.test$prob_age_full <- prob_calc_waiting_time_full(df.test$age)
+```
+
+### Scaling and modeling
+After we looked on the data, let's start building some models and start look for a proper model to our problem.
+```{r}
+df.train.balanced$age_scaled <- df.train.balanced$age / max(df.train.balanced$age)
+df.train.balanced$waiting_time_scaled <- df.train.balanced$waiting_time / max(df.train.balanced$waiting_time)
+
+df.test$age_scaled <- df.test$age / max(df.test$age)
+df.test$waiting_time_scaled <- df.test$waiting_time / max(df.test$waiting_time)
+```
+Since we're dealing with binary values in most of our data, we would like to scale waiting_time and age features to be at the same scale.
+Hence, we've boundered them into 0-1
+
+#### Logistic Model
+```{r}
+logit_model <- glm(no_show ~ age_scaled+
+                         waiting_time_scaled+
+                         scholarship+
+                         sms_recieved, data = df.train.balanced, family = binomial)
+summary (logit_model)
+plot(logit_model)
+
+logit_model_full <- glm(no_show ~ prob_age_full+
+                         prob_waiting_time_full, data = df.train, family = binomial)
+```
+
+
+#### CART
+```{r}
+pacman::p_load("tree")
+noshow.CART <- tree(no_show ~ week_day+
+                      waiting_time+
+                      age+
+                      is_female+
+                      scholarship+
+                      hipertension+
+                      diabetes+
+                      alcoholism+
+                      handcap+
+                      sms_recieved+
+                      poverty+
+                      region ,data = df.train.balanced)
+plot(noshow.CART)
+text(noshow.CART, pretty = 0, cex=0.5)
+summary(noshow.CART)
+```
+
+#### RF
+```{r}
+pacman::p_load("randomForest")
+set.seed(7)
+noshow.RF <- randomForest(no_show ~ week_day
+                          +waiting_time_scaled
+                          +age_scaled
+                          +is_female
+                          +scholarship
+                          +sms_recieved
+                          +poverty
+                          +region
+                          , data = df.train.balanced, na.action=na.omit, type="classification", ntree=100) 
+plot(noshow.RF)
+#importance(noshow.RF)
+varImpPlot(noshow.RF)
+```
+
+#### GBM
+```{r}
+# install.packages("gbm",repos = "http://cran.us.r-project.org")
+#library("gbm")
+pacman::p_load("gbm")
+set.seed(7) #same seed to repeat the RF
+no_show.gbm <- gbm (no_show ~ week_day+
+                         waiting_time_scaled+
+                         age_scaled+
+                         is_female+
+                         scholarship+
+                         sms_recieved+
+                         poverty+
+                         region ,data = df.train.balanced, n.trees = 1000, interaction.depth = 4, shrinkage = 0.2, verbose = F)
+no_show.gbm
+summary(no_show.gbm)
+```
+
+### Model evaluation
+#### Logistic Model
+```{r}
+threshold = 0.5
+fitted.lm.results <- predict(logit_model,df.test,type='response')
+lm.prediction <- ifelse(fitted.lm.results > threshold,1,0)
+lm.accuracy <- mean(lm.prediction == df.test$no_show)
+lm.accuracy
+
+# fitted.lm.results_full <- predict(logit_model_full,df.test,type='response')
+# lm.prediction_full <- ifelse(fitted.lm.results_full > threshold,1,0)
+# lm.accuracy_full <- mean(lm.prediction_full == df.test$no_show)
+# lm.accuracy_full
+```
+```{r}
+#install.packages("caret",repos = "http://cran.us.r-project.org") 
+#library("caret")
+#install.packages("e1071",repos = "http://cran.us.r-project.org")
+#library("e1071")
+pacman::p_load("caret")
+pacman::p_load("e1071")
+confusionMatrix(data = lm.prediction, reference =  df.test$no_show)
+```
+
+```{r}
+cross.table <- table(lm.prediction, df.test$no_show)
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
+```
+
+```{r}
+#install.packages("pROC",repos = "http://cran.us.r-project.org")
+pacman::p_load("pROC")
+plot(roc(df.test$no_show, fitted.lm.results, direction="<"), col="blue", main="Left ROC curve")
+```
+
+#### CART
+```{r}
+threshold = 0.6
+fitted.cart.results <- predict(noshow.CART,df.test)
+summary(fitted.cart.results)
+
+cart.prediction <- ifelse(fitted.cart.results > threshold,1,0)
+summary(cart.prediction)
+```
+
+```{r}
+cross.table <- table(cart.prediction, df.test$no_show)
+cross.table
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
+
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
+```
+
+#### RF
+```{r}
+threshold <- 0.6
+fitted.rf.results <- predict(noshow.RF,df.test)
+summary(fitted.rf.results)
+rf.prediction <- ifelse(fitted.rf.results > threshold,1,0)
+summary(rf.prediction)
+```
+
+```{r}
+cross.table <- table(rf.prediction, df.test$no_show)
+
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
+
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
+```
+
+#### GBM
+```{r}
+threshold <- 0.5
+fitted.gbm.results <- predict(no_show.gbm,df.test, n.trees = 1000)
+summary(fitted.gbm.results)
+gbm.prediction <- ifelse(fitted.gbm.results > threshold,1,0)
+summary(gbm.prediction)
+```
+
+```{r}
+cross.table <- table(gbm.prediction, df.test$no_show)
+
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
+```
+
+#### Conclusion 
+|&nbsp;| **Accuracy**|**Precision**|**Recall**|**F1**|
+|:----|----------:|----------:|----------:|----------:|
+|GLM|0.696539244514816|0.315916398713826|0.444771389769126|0.369430344049633|
+|CART|0.653472065143633|0.316711895070104|**0.633997283838841**|**0.42240989292716**|
+|RF|0.702510744175526|**0.337987987987988**|0.509506564056134|0.406391045315039|
+|GBM|**0.715403754806605**|0.342684360826474|0.461747397012223|0.393404686144056|
+
+#### Ensemble method - Majority vote
+
+taking the prediction with maximum vote / recommendation from multiple models predictions while predicting the outcomes of a classification problem
+
+```{r}
+pred_majority <- as.factor(ifelse(lm.prediction=='1' & rf.prediction=='1','1',ifelse(lm.prediction=='1' & gbm.prediction=='1','1',ifelse(rf.prediction=='Y' & gbm.prediction=='1','1','0'))))
+df.test$pred_maj <- pred_majority
+
+cross.table <- table(df.test$pred_maj, df.test$no_show)
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
+```
+
