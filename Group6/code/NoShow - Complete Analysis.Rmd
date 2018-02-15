@@ -1,0 +1,733 @@
+---
+title: "Business Data analytics Group 6- Show/No Show classification"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load("knitr")
+pacman::p_load("ggplot2")
+
+root_dir <- "~/source/big_data/Group6/datasets/"
+knitr::opts_knit$set(root.dir = root_dir)
+```
+
+# Import data and set objective
+
+```{r}
+df.train <- read.csv("NS.TRAIN.csv")
+df.test <- read.csv("NS.TEST.csv")
+```
+
+
+```{r}
+dim(df.train)
+```
+The train DF holds 88416x35 rows and attributes(columns)
+
+
+#### High importance variables
+#### Review waiting time in the test data
+
+```{r}
+stripchart(df.train$waiting_time, method = "jitter",  vertical = TRUE, col ="blue",cex = 0.75, pch= 1)
+
+```
+We can see that we have some outliers in the waiting time feature. Hence, we'll compress the over 90 days waiting tome to group of 90 days waiting time.
+
+```{r, include=FALSE}
+df.train$waiting_time[df.train$waiting_time>90] <- 90
+```
+
+#### Review ages in the test data
+
+Outliers for Age feature. we can see that we have several ages that are beyond 85 y.o and the number of occurrence is not high, hence, we'll compress them to the age of 85
+```{r}
+stripchart(df.train$age, method = "jitter",  vertical = TRUE, col ="blue",cex = 0.75, pch= 1)
+```
+
+```{r}
+df.train$age[df.train$age>85] <- 85
+```
+removing the outliers for age
+
+```{r, include=FALSE}
+draw_age_gg <- function(bottom, top)
+{
+# limit the wayting time range
+df.train_limit <- df.train[df.train$age>=bottom & df.train$age<top ,]
+
+# calculate probabilties
+eda_age_mean <-aggregate(df.train_limit$no_show, by=list((df.train_limit$age)), FUN=mean)
+colnames(eda_age_mean) <- c("age","prob")
+
+# calculate  number of observations
+eda_age_count <-aggregate(df.train_limit$no_show, by=list((df.train_limit$age)), FUN=length)
+colnames(eda_age_count) <- c("age","count")
+
+# merge to single data frame
+m <- merge(eda_age_mean, eda_age_count, by="age" )
+
+#count total number observations
+obs <- nrow(df.train_limit)
+
+# model
+mod <- lm(prob ~ age, data = m)
+
+if (is.na(coef(mod)[2]) == TRUE)
+{eq <- paste0("X = ",coef(mod)[1])} else {
+  if (coef(mod)[2] > 0) {
+  eq <- paste0("X = ",coef(mod)[1]," + ",coef(mod)[2]," * Y")
+  } else {
+  eq <- paste0("X = ",coef(mod)[1]," - ",abs(coef(mod)[2])," * Y")    
+}}
+
+
+# plot!
+ggplot(m, aes(age,prob))+        #plot rea
+  geom_jitter(aes(size = count))+   #add point with count as size
+    geom_smooth(method = "lm")+       #add trendline and confidance area
+      labs(title="No-Show Probabilty vs. Age",
+            subtitle= paste0("Age range: ",bottom,"-",top," (", obs, " observations) ",eq),
+              y="Probabilty", 
+                x="Age"
+          ) # add lables
+
+}
+```
+ 
+Let's examine the Age variable and see if we have a linear correlation to NS probability
+```{r}
+#Draw
+draw_age_gg(0,18)
+draw_age_gg(18,65)
+draw_age_gg(65,999)
+```
+We can clearly see that we have a linear correlation.
+
+### Trainning models on train dataset
+#### Logistic Model
+```{r}
+noshow.LM <- glm(no_show ~ age+
+                         waiting_time+
+                         scholarship+
+                         sms_recieved, data = df.train, family = binomial)
+summary (noshow.LM)
+plot(noshow.LM)
+```
+
+
+#### CART
+```{r}
+pacman::p_load("tree")
+noshow.CART <- tree(no_show ~ week_day+
+                      waiting_time+
+                      age+
+                      is_female+
+                      scholarship+
+                      hipertension+
+                      diabetes+
+                      alcoholism+
+                      handcap+
+                      sms_recieved+
+                      poverty+
+                      region ,data = df.train)
+plot(noshow.CART)
+text(noshow.CART, pretty = 0, cex=0.5)
+summary(noshow.CART)
+```
+
+#### Random Forest
+```{r}
+pacman::p_load("randomForest")
+set.seed(7)
+noshow.RF <- randomForest(no_show ~ week_day
+                          +waiting_time
+                          +age
+                          +is_female
+                          +scholarship
+                          +sms_recieved
+                          +poverty
+                          +region
+                          , data = df.train, na.action=na.omit, type="classification", ntree=100) 
+plot(noshow.RF)
+#importance(noshow.RF)
+varImpPlot(noshow.RF)
+```
+
+#### Gradient Boosting Machine
+```{r}
+# install.packages("gbm",repos = "http://cran.us.r-project.org")
+#library("gbm")
+pacman::p_load("gbm")
+set.seed(7) #same seed to repeat the RF
+no_show.GBM <- gbm (no_show ~ week_day+
+                         waiting_time+
+                         age+
+                         is_female+
+                         scholarship+
+                         sms_recieved+
+                         poverty+
+                         region ,data = df.train, n.trees = 100, interaction.depth = 4, shrinkage = 0.2, verbose = F)
+no_show.GBM
+summary(no_show.GBM)
+```
+
+### Model evaluation
+#### Logistic Model
+```{r}
+threshold = 0.3
+fitted.lm.results <- predict(noshow.LM,df.test,type='response')
+lm.prediction <- ifelse(fitted.lm.results > threshold,1,0)
+lm.accuracy <- mean(lm.prediction == df.test$no_show)
+lm.accuracy
+```
+
+```{r}
+pacman::p_load("caret")
+pacman::p_load("e1071")
+confusionMatrix(data = lm.prediction, reference =  df.test$no_show)
+```
+
+```{r}
+cross.table <- table(lm.prediction, df.test$no_show)
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
+model <- "LM"
+
+lm_results <- c(model, round(accuracy,4),round(precision,4),round(recall,4),round(f1,4))
+```
+
+```{r}
+#install.packages("pROC",repos = "http://cran.us.r-project.org")
+pacman::p_load("pROC")
+plot(roc(df.test$no_show, fitted.lm.results, direction="<"), col="blue", main="Left ROC curve")
+```
+
+#### CART
+```{r}
+threshold = 0.3
+fitted.cart.results <- predict(noshow.CART,df.test)
+summary(fitted.cart.results)
+
+cart.prediction <- ifelse(fitted.cart.results > threshold,1,0)
+summary(cart.prediction)
+```
+
+```{r}
+cross.table <- table(cart.prediction, df.test$no_show)
+cross.table
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
+
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
+model <- "CART"
+
+cart_results <- c(model, round(accuracy,4),round(precision,4),round(recall,4),round(f1,4))
+```
+
+#### RF
+```{r}
+threshold <- 0.4
+fitted.rf.results <- predict(noshow.RF,df.test)
+summary(fitted.rf.results)
+rf.prediction <- ifelse(fitted.rf.results > threshold,1,0)
+summary(rf.prediction)
+```
+
+```{r}
+cross.table <- table(rf.prediction, df.test$no_show)
+
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
+
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
+model <- "RF"
+
+rf_results <- c(model, round(accuracy,4),round(precision,4),round(recall,4),round(f1,4))
+```
+
+#### GBM
+```{r}
+threshold <- 0.6
+fitted.gbm.results <- predict(no_show.GBM,df.test, n.trees = 100)
+summary(fitted.gbm.results)
+gbm.prediction <- ifelse(fitted.gbm.results > threshold,1,0)
+summary(gbm.prediction)
+```
+
+```{r}
+cross.table <- table(gbm.prediction, df.test$no_show)
+
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
+model <- "GBM"
+
+gbm_results <- c(model, round(accuracy,4),round(precision,4),round(recall,4),round(f1,4))
+```
+
+```{r}
+evaluate <- rbind(lm_results, cart_results, rf_results, gbm_results)
+colnames(evaluate) <- c("Model","Accuracy","Precision","Recall","F1")
+kable(evaluate, caption = "Resuls Evaluation")
+```
+
+## Conclusion
+Not good enough.. Recall and Precision are low although accuracy is high. It looks like something is biasing the data.
+Lets take onther look at the tree generated by CART alg
+
+```{r}
+plot(noshow.CART)
+text(noshow.CART, pretty = 0, cex=0.5)
+```
+
+
+Let's Examine the waiting time varaible as well
+
+```{r, include=FALSE}
+draw_waiting_days_gg <- function(bottom, top)
+{
+# limit the wayting time range
+df.train_limit <- df.train[df.train$waiting_time>=bottom & df.train$waiting_time<top ,]
+
+# calculate probabilties
+eda_waiting_time_mean <-aggregate(df.train_limit$no_show, by=list((df.train_limit$waiting_time)), FUN=mean)
+colnames(eda_waiting_time_mean) <- c("days","prob")
+
+# calculate  number of observations
+eda_waiting_time_count <-aggregate(df.train_limit$no_show, by=list((df.train_limit$waiting_time)), FUN=length)
+colnames(eda_waiting_time_count) <- c("days","count")
+
+# merge to single data frame
+m <- merge(eda_waiting_time_mean, eda_waiting_time_count, by="days" )
+
+#count total number observations
+obs <- nrow(df.train_limit)
+
+# model
+mod <- lm(prob ~ days, data = m)
+if (is.na(coef(mod)[2]) == TRUE)
+{eq <- paste0("X = ",coef(mod)[1])} else {
+  if (coef(mod)[2] > 0) {
+  eq <- paste0("X = ",coef(mod)[1]," + ",coef(mod)[2]," * Y")
+  } else {
+  eq <- paste0("X = ",coef(mod)[1]," - ",abs(coef(mod)[2])," * Y")    
+}}
+
+
+# plot!
+ggplot(m, aes(days,prob))+        #plot rea
+  geom_jitter(aes(size = count))+   #add point with count as size
+    geom_smooth(method = "lm")+       #add trendline and confidance area
+      labs(title="No-Show Probabilty vs. Waiting Time",
+            subtitle= paste0(bottom,"-",top," days (", obs, " observations)  ",eq),
+              y="Probabilty", 
+                x="Waitnig Days"
+          ) # add lables
+
+}
+```
+
+```{r}
+#Draw
+draw_waiting_days_gg(0,1)
+draw_waiting_days_gg(1,25)
+draw_waiting_days_gg(25,999)
+```
+
+Note that the CART tree is not splitting as we would like since we only have 2 major variables and the other variables are screened by those two.
+Let's "cut" the tree and remove the waiting_time < 0.5.
+
+** *Current model's assumption** - if the patient's waiting_time is eq or less than 0.5 days, he has high probability to **show** to its appointment.
+
+#### Split the data set to include only waiting time > 0.5
+```{r}
+df.train.0.5 <- df.train[df.train$waiting_time>0.5,]
+df.test.0.5 <- df.test[df.test$waiting_time >0.5,]
+dim(df.train.0.5)
+dim(df.test.0.5)
+```
+
+### Train Again on the above 0.5 train dataset
+```{r}
+noshow.LM.2 <- glm(no_show ~ age+
+                         waiting_time+
+                         scholarship+
+                         sms_recieved, data = df.train.0.5, family = binomial)
+
+noshow.CART.2 <- tree(no_show ~ week_day+
+                      waiting_time+
+                      age+
+                      is_female+
+                      scholarship+
+                      hipertension+
+                      diabetes+
+                      alcoholism+
+                      handcap+
+                      sms_recieved+
+                      poverty+
+                      region ,data = df.train.0.5)
+
+set.seed(7)
+noshow.RF.2 <- randomForest(no_show ~ week_day
+                          +waiting_time
+                          +age
+                          +is_female
+                          +scholarship
+                          +sms_recieved
+                          +poverty
+                          +region
+                          , data = df.train.0.5, na.action=na.omit, type="classification", ntree=100) 
+
+no_show.GBM.2 <- gbm (no_show ~ week_day+
+                         waiting_time+
+                         age+
+                         is_female+
+                         scholarship+
+                         sms_recieved+
+                         poverty+
+                         region ,data = df.train.0.5, n.trees = 100, interaction.depth = 4, shrinkage = 0.2, verbose = F)
+```
+
+
+
+### Evaluate Again on test
+####LM
+```{r}
+threshold = 0.5
+fitted.lm.results <- predict(noshow.LM.2,df.test.0.5,type='response')
+lm.prediction <- ifelse(fitted.lm.results > threshold,1,0)
+
+
+cross.table <- table(lm.prediction, df.test.0.5$no_show)
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
+model <- "LM"
+
+lm_results <- c(model, round(accuracy,4),round(precision,4),round(recall,4),round(f1,4))
+```
+
+####CART
+```{r}
+threshold = 0.3
+fitted.cart.results <- predict(noshow.CART.2,df.test.0.5)
+cart.prediction <- ifelse(fitted.cart.results > threshold,1,0)
+cross.table <- table(cart.prediction, df.test.0.5$no_show)
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
+
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
+model <- "CART"
+
+cart_results <- c(model, round(accuracy,4),round(precision,4),round(recall,4),round(f1,4))
+
+```
+
+####RF
+```{r}
+threshold <- 0.4
+fitted.rf.results <- predict(noshow.RF.2,df.test.0.5)
+rf.prediction <- ifelse(fitted.rf.results > threshold,1,0)
+cross.table <- table(rf.prediction, df.test.0.5$no_show)
+
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
+
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
+model <- "RF"
+
+rf_results <- c(model, round(accuracy,4),round(precision,4),round(recall,4),round(f1,4))
+```
+
+####GBM
+```{r}
+threshold <- 0.4
+fitted.gbm.results <- predict(no_show.GBM.2,df.test.0.5, n.trees = 100)
+gbm.prediction <- ifelse(fitted.gbm.results > threshold,1,0)
+cross.table <- table(gbm.prediction, df.test.0.5$no_show)
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
+model <- "GBM"
+
+gbm_results <- c(model, round(accuracy,4),round(precision,4),round(recall,4),round(f1,4))
+```
+
+
+
+```{r}
+evaluate_2 <- rbind(lm_results, cart_results, rf_results, gbm_results)
+colnames(evaluate_2) <- c("Model","Accuracy","Precision","Recall","F1")
+
+kable(evaluate_2, caption = "Resuls Evaluation wiht wating time > 0.5")
+```
+
+
+## 2nd conclusion
+Model Recalls are still low. We're still assuming the data is biased.
+Let's examine our train dataset
+```{r}
+dim(df.train[df.train$no_show==0,])
+dim(df.train[df.train$no_show==1,])
+```
+We're holding 70K shows and 17K no shows. this will cause the model to be baised.. and we don't want that!
+so we are trying to affect the mosdels' loss function with a symetric train set (no show probabilty = 50%)
+
+##### Split Train to 50/50 show/no show
+
+```{r}
+df.no_show <- sample(df.train[df.train$no_show==1,])
+df.show <- sample(df.train[df.train$no_show==0,])
+df.train.balanced <- rbind(df.no_show, df.show[1:17896,])
+dim(df.train.balanced)
+```
+Now we're having a balanced DF with 50%/50% shows/no shows
+```{r}
+dim(df.train.balanced[df.train.balanced$no_show==0,])
+dim(df.train.balanced[df.train.balanced$no_show==1,])
+```
+
+### Train Again on the balanced train dataset
+With balanced train set
+```{r}
+noshow.LM.b <- glm(no_show ~ age+
+                         waiting_time+
+                         scholarship+
+                         sms_recieved, data = df.train.balanced, family = binomial)
+
+noshow.CART.b <- tree(no_show ~ week_day+
+                      waiting_time+
+                      age+
+                      is_female+
+                      scholarship+
+                      hipertension+
+                      diabetes+
+                      alcoholism+
+                      handcap+
+                      sms_recieved+
+                      poverty+
+                      region ,data = df.train.balanced)
+
+set.seed(7)
+noshow.RF.b <- randomForest(no_show ~ week_day
+                          +waiting_time
+                          +age
+                          +is_female
+                          +scholarship
+                          +sms_recieved
+                          +poverty
+                          +region
+                          , data = df.train.balanced, na.action=na.omit, type="classification", ntree=100) 
+
+no_show.GBM.b <- gbm (no_show ~ week_day+
+                         waiting_time+
+                         age+
+                         is_female+
+                         scholarship+
+                         sms_recieved+
+                         poverty+
+                         region ,data = df.train.balanced, n.trees = 100, interaction.depth = 4, shrinkage = 0.2, verbose = F)
+```
+
+
+### Evaluate on test dataset
+####LM
+```{r}
+threshold = 0.3
+fitted.lm.results <- predict(noshow.LM.b,df.test,type='response')
+lm.prediction <- ifelse(fitted.lm.results > threshold,1,0)
+
+
+cross.table <- table(lm.prediction, df.test$no_show)
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
+model <- "LM"
+
+lm_results <- c(model, round(accuracy,4),round(precision,4),round(recall,4),round(f1,4))
+```
+
+####CART
+```{r}
+threshold = 0.3
+fitted.cart.results <- predict(noshow.CART.b,df.test)
+cart.prediction <- ifelse(fitted.cart.results > threshold,1,0)
+cross.table <- table(cart.prediction, df.test$no_show)
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
+
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
+model <- "CART"
+
+cart_results <- c(model, round(accuracy,4),round(precision,4),round(recall,4),round(f1,4))
+
+```
+
+####RF
+```{r}
+threshold <- 0.3
+fitted.rf.results <- predict(noshow.RF.b,df.test)
+rf.prediction <- ifelse(fitted.rf.results > threshold,1,0)
+cross.table <- table(rf.prediction, df.test$no_show)
+
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
+
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
+model <- "RF"
+
+rf_results <- c(model, round(accuracy,4),round(precision,4),round(recall,4),round(f1,4))
+```
+
+####GBM
+```{r}
+threshold <- 0.3
+fitted.gbm.results <- predict(no_show.GBM.b,df.test, n.trees = 100)
+gbm.prediction <- ifelse(fitted.gbm.results > threshold,1,0)
+cross.table <- table(gbm.prediction, df.test$no_show)
+l <- nrow(cross.table)
+if(l< 2)  {
+          cross.table <- rbind(cross.table, c(0,0))
+          }
+accuracy <- (cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1])
+precision <- cross.table[2,2]/(cross.table[2,2]+cross.table[2,1])
+recall <- cross.table[2,2]/(cross.table[2,2]+cross.table[1,2])
+f1 <- 2*(recall*precision)/(recall+precision)
+
+paste("Accuracy -",accuracy)
+paste("Precision -",precision)
+paste("Recall -",recall)
+paste("F1 -",f1)
+model <- "GBM"
+
+gbm_results <- c(model, round(accuracy,4),round(precision,4),round(recall,4),round(f1,4))
+```
+
+```{r echo= FALSE}
+evaluate_b <- rbind(lm_results, cart_results, rf_results, gbm_results)
+colnames(evaluate_b) <- c("Model","Accuracy","Precision","Recall","F1")
+
+kable(evaluate_b, caption = "Resuls Evaluation whn training on balanced train set")
+```
+
+
+## Conlclusion
+Random Forest will be a suitable model for the balanced train set and the test set.
+
+Depending the business question, we'll assume the following - 
+1.Using high model threshold (>0.5), we'll get high precision - Since high precision tells us that the ratio of correctly predicted positive observations of the total predicted positive observations, we're sure that the predicted patients will not show up to the appointment. in this case, we'll recommand to **perform a double booking** to another patient to avoid no shows.
+
+2.Using high model threshold (<0.4), we'll get high recall - Since high recall tells us that the ratio of correctly predicted positive observations of the total observations, we're positive that the predicted patients belong to the class of no show. in this case, we'll recommand to **perform a phone call** to that patient remind him his appointment. This way, we can reduce the probability to no show.

@@ -291,10 +291,33 @@ noshow.CART <- tree(no_show ~ week_day+
 plot(noshow.CART)
 text(noshow.CART, pretty = 0, cex=0.5)
 summary(noshow.CART)
+
+
+#TODO : remove after phonecall the following lines
+
+df.train.above1 <- df.train.balanced[df.train.balanced$waiting_time>=1,]
+
+noshow.CART.above <- tree(no_show ~ week_day+
+                      waiting_time+
+                      age+
+                      is_female+
+                      scholarship+
+                      hipertension+
+                      diabetes+
+                      alcoholism+
+                      handcap+
+                      sms_recieved+
+                      poverty+
+                      region ,data = df.train.above1)
+plot(noshow.CART.above)
+text(noshow.CART.above, pretty = 0, cex=0.5)
+summary(noshow.CART.above)
+
 ```
 
 #### Random Forest
 ```{r}
+df.train.above1 <- df.train.balanced[df.train.balanced$waiting_time>=1,]
 pacman::p_load("randomForest")
 set.seed(7)
 noshow.RF <- randomForest(no_show ~ week_day
@@ -305,7 +328,7 @@ noshow.RF <- randomForest(no_show ~ week_day
                           +sms_recieved
                           +poverty
                           +region
-                          , data = df.train.balanced, na.action=na.omit, type="classification", ntree=100) 
+                          , data = df.train.above1, na.action=na.omit, type="classification", ntree=100) 
 plot(noshow.RF)
 #importance(noshow.RF)
 varImpPlot(noshow.RF)
@@ -317,6 +340,7 @@ varImpPlot(noshow.RF)
 #library("gbm")
 pacman::p_load("gbm")
 set.seed(7) #same seed to repeat the RF
+
 no_show.gbm <- gbm (no_show ~ week_day+
                          waiting_time+
                          age+
@@ -324,7 +348,7 @@ no_show.gbm <- gbm (no_show ~ week_day+
                          scholarship+
                          sms_recieved+
                          poverty+
-                         region ,data = df.train.balanced, n.trees = 1000, interaction.depth = 4, shrinkage = 0.2, verbose = F)
+                         region ,data = df.train.above1, n.trees = 1000, interaction.depth = 4, shrinkage = 0.2, verbose = F)
 no_show.gbm
 summary(no_show.gbm)
 ```
@@ -332,7 +356,7 @@ summary(no_show.gbm)
 ### Model evaluation
 #### Logistic Model
 ```{r}
-threshold = 0.5
+threshold = 0.6
 fitted.lm.results <- predict(logit_model,df.test,type='response')
 lm.prediction <- ifelse(fitted.lm.results > threshold,1,0)
 lm.accuracy <- mean(lm.prediction == df.test$no_show)
