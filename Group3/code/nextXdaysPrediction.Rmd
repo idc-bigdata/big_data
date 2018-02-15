@@ -1,0 +1,546 @@
+---
+title: "Stocks Market"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Stocks Predict - classification in R 
+#### Eyal Gat, Mor Anavi & Ori Dahari
+```{r, include=FALSE}
+library(binhf)
+library(quantmod)
+library(xts)
+library("randomForest")
+library("gbm")
+
+```
+
+
+
+##Function that compute variables to stock
+```{r}
+add.data.frame <- function(Split.df){
+
+ 
+ #Change between yesterday close-today close
+yesterday_closePrice= shift(v=as.numeric(Split.df$Close), places=1, dir="right")
+Change= (Split.df$Close-yesterday_closePrice)/yesterday_closePrice*100
+Change[1]=0
+
+  #Change between yesterday close-today open price
+Open_Change= (Split.df$Open-yesterday_closePrice)/yesterday_closePrice*100
+Open_Change[1]=0
+
+#Change between yesterday todey open-today close price
+Change_Within= Change-Open_Change
+
+#Ratio between high,low,open,close
+High_Close= Split.df$High/Split.df$Close
+
+Low_Close=  Split.df$Low/ Split.df$Close
+
+High_Low=  Split.df$High/ Split.df$Low
+
+High_Open=  Split.df$High/ Split.df$Open
+
+Low_Open=  Split.df$Low/ Split.df$Open
+
+EMA.Fast <- EMA(Split.df$Close, n=20)
+EMA.Medium <- EMA(Split.df$Close, n=120) 
+EMA.Slow <- EMA(Split.df$Close, n=200) 
+EMA.10=  EMA(Split.df$Close, n=10)
+EMA.50= EMA(Split.df$Close, n=50)
+EMA.80= EMA(Split.df$Close, n=80)
+EMA.100= EMA(Split.df$Close, n=100)
+EMA.150= EMA(Split.df$Close, n=150)
+fast_detrend_ma <- EMA.Fast - EMA.Medium
+slow_detrend_ma <- EMA.Medium - EMA.Slow
+CCI.IND <- CCI(HLC=Split.df[,c("High","Low","Close")],n=100)
+RSI.Fast <- RSI(price=Split.df$Close,n=10)
+RSI.Slow <- RSI(price=Split.df$Close,n=100)
+RSI.Medium= RSI(price=Split.df$Close,n=30)
+RSI.14= RSI(price=Split.df$Close,n=14)
+RSI.50= RSI(price=Split.df$Close,n=50)
+RSI.80= RSI(price=Split.df$Close,n=80)
+RSI.Diff.Med <- RSI.Medium-RSI.Slow
+RSI.Diff.Fast <- RSI.Fast-RSI.Medium
+ROC.Fast <- ROC(Split.df$Close,n=10)
+ROC.Medium <- ROC(Split.df$Close,n=100)
+ROC.Slow <- ROC(Split.df$Close,n=200)
+ROC.Diff <- ROC.Fast-ROC.Medium
+ROC.Diff.Medium <- ROC.Medium-ROC.Slow
+CV.IND=chaikinVolatility(HL=Split.df[,c("High","Low")],n=100)
+
+Split.df <- data.frame(Split.df[],Change,Open_Change,Change_Within,High_Close,Low_Close,High_Low,High_Open,Low_Open,EMA.Fast,EMA.Medium,EMA.Slow, fast_detrend_ma,slow_detrend_ma,CCI.IND,RSI.Fast,RSI.Slow,RSI.Diff.Med,RSI.Diff.Fast,ROC.Fast,ROC.Slow,ROC.Diff,EMA.10,EMA.50,EMA.80,EMA.100,EMA.150,CV.IND,RSI.14,RSI.50,RSI.80,RSI.Medium,ROC.Medium,ROC.Diff.Medium)
+
+
+return(Split.df)
+  
+}
+
+
+
+```
+
+#Adding technical indicators to stock 
+```{r}
+addInd<- function(data2){
+  
+    data2$LogClose <- log(data2$Close)  
+  data2$MACD <- MACD(data2$Close)
+ data2$will <- williamsAD(data2[,c("High","Low","Close")])
+ data2$cci <-  CCI(data2[,c("High","Low","Close")])
+ data2$STOCH <- stoch(data2[,c("High","Low","Close")])
+ data2$Aroon <- aroon(data2[, c("High","Low")])
+ data2$ATR <- ATR(data2[,c("High","Low","Close")]) 
+data2$stoch<-stoch(data2[, c("High","Low","Close")], nFastK = 14,nFastD = 3,nSlowD = 3,bounded = TRUE,smooth = 1)
+data2$obv=OBV(data2[, c("Close")],data2[, c("Volume")])
+ data2$SMI <- SMI(data2[, c("High","Low","Close")])
+ data2$BB <- BBands(data2[, c("High","Low","Close")])
+ data2$ChaikinVol <-Delt(chaikinVolatility(data2[, c("High","Low")]))
+ data2$CLV <- EMA(CLV(data2[, c("High","Low","Close")]))
+ data2$Volatility <- volatility(data2[, c("Open","High","Low","Close")], calc="garman")
+  
+ return(data2)
+  
+}
+```
+
+
+# Function that compute the Y predict to stock:
+```{r}
+computeY <- function(df){
+ boolean=FALSE
+  
+     closePriceXdays=shift(v=as.numeric(df$Close ), places=1, dir="left")
+       boolean = (closePriceXdays-df$Close)/df$Close*100>0
+    
+  vectorY=ifelse(boolean ,1,0)
+  
+ return( vectorY )
+  
+  
+}
+
+```
+
+# Function that add row to prediction table:
+```{r}
+
+add.prediction.row <- function(Sym,model,summary_data,cross.table11,cross.table12,cross.table21,cross.table22){
+
+ return( cbind(Sym,model,summary_data,cross.table11,cross.table12,cross.table21,cross.table22) )
+  
+  
+}
+
+```
+
+# Calculate the Profit and Loss using the RF predict model:
+```{r}
+ProfitLoss_Calculator <- function(objDF) {
+        # make column names generic so they can handle any symbol
+        
+        
+        current_long <- 0
+        current_short <- 0
+        
+        for (ind in seq(1,nrow(objDF))) {
+                if (!is.na( objDF$Long_Trades[ind])) {
+                        # first trade should be an entry, last trade an exit
+                        if ((current_long==0 & objDF$Long_Trades[ind] > 0) | (current_long !=0)) {
+                                # next trade should be opposite sign of previous trade (entry -> exit)
+                                if (sign(objDF$Long_Trades[ind]) != sign(current_long)) {
+                                        current_long <- as.numeric(objDF$Long_Trades[ind])
+                                        print(paste('Long', current_long))
+                                }
+                        }
+                
+                        if (current_long != as.numeric(objDF$Long_Trades[ind]))
+                                objDF$Long_Trades[ind] <- 0
+                }
+       
+          
+              #  if (objDF$Short_Trades[ind] !=0) {
+                        # first trade should be an entry
+               #         if ((current_short==0 & objDF$Short_Trades[ind] > 0) | (current_short !=0)) {
+                                # next trade should be opposite sign of previous trade (entry -> exit)
+                #                if (sign(objDF$Short_Trades[ind]) != sign(current_short)) {
+                 #                       current_short <- as.numeric(objDF$Short_Trades[ind])
+                  #                      print(paste('Short', current_short))
+                   #             }
+                    #    }
+                     #   if (current_short != as.numeric(objDF$Short_Trades[ind]))
+                      #          objDF$Short_Trades[ind] <- 0
+                }
+ 
+        
+        # trim to be even, if not add last close held in chart
+        if ((!length(objDF$Long_Trades[objDF$Long_Trades != 0])%% 2) == 0){
+               objDF$Long_Trades[length(objDF$Close)] <- -1 * objDF$Close[length(objDF$Close)]
+               current_long=-1 * objDF$Close[length(objDF$Close)]
+        }
+      #  if ((!length(objDF$Short_Trades[objDF$Short_Trades != 0])%% 2) == 0)
+      #         objDF$Short_Trades[length(objDF$Close)] <- -1 * objDF$Close[length(objDF$Close)]
+      #  View(objDF$Long_Trades)
+        print(paste('Final Longs:',round(sum(objDF$Long_Trades * -1 , na.rm = TRUE),2)))
+     #   print(paste('Final Shorts:',round(sum(objDF$Short_Trades),2)))
+        
+        earn=(-1*current_long-(-1*current_long-(round(sum(objDF$Long_Trades * -1 , na.rm = TRUE),2))) ) / (-1*current_long-(round(sum(objDF$Long_Trades * -1 , na.rm = TRUE),2)))*100
+        
+        print(paste('yield:',earn))
+        print(paste('yield per day:',earn/(length(objDF$Long_Trades)- sum(is.na(objDF$Long_Trades)))))
+        # plot trade entries and exits
+      #  par(mfrow=c(2,1))
+        
+        plot(objDF$Close ,main='Long Trades', subset="")
+        events <- xts("80/20", 
+              (c(index(MainStock[bound,]))))
+        addEventLines(events, srt=90, pos=2,lty = 1, lwd = 1, col = 1)
+        
+        points(ifelse(objDF$Long_Trades > 0, objDF$Long_Trades, NA), col='green', cex=1.5, pch=16)
+        points(ifelse(objDF$Long_Trades < 0, objDF$Long_Trades * -1, NA), col='red', cex=1.5, pch=15)
+        
+      #  plot(objDF, main='Short Trades')
+       # points(ifelse(objDF$Short_Trades > 0, objDF$Short_Trades, NA), col='green', cex=1.5, pch=16)
+        #points(ifelse(objDF$Short_Trades < 0, objDF$Short_Trades * -1, NA), col='red', cex=1.5, pch=15)
+}
+
+```
+
+
+# Choose stocks and build RF and GBM predict models:
+```{r}
+name = c(
+  
+  "A", "AAL", "AAP", "AAPL", "ABBV", "ABC", "ABT", "ACN", "ADBE", "ADI", "ADM", "ADP", "ADS", "ADSK", "AEE", "AEP", "AES", "AET", "AFL", "AGN", "AIG", "AIV", "AIZ", "AJG", "AKAM", "ALB", "ALK", "ALL", "ALLE", "ALXN", "AMAT", "AME", "AMG", "AMGN", "AMP", "AMT", "AMZN", "AN", "ANTM", "AON", "APA", "APC", "APD", "APH", "ARNC", "ATVI", "AVB", "AVGO", "AVY", "AWK", "AXP", "AYI", "AZO", "BA", "BAC", "BAX", "BBBY", "BBT", "BBY", "BDX", "BEN", "BIIB", "BK", "BLK", "BLL", "BMY", "BSX", "BWA", "BXP", "C", "CA", "CAG", "CAH", "CAT", "CB", "CBG", "CBOE", "CBS", "CCI", "CCL", "CELG", "CERN", "CF", "CFG", "CHD", "CHK", "CHRW", "CHTR", "CI", "CINF", "CL", "CLX", "CMA", "CMCSA", "CME", "CMG", "CMI", "CMS", "CNC", "CNP", "COF", "COG", "COL", "COO", "COP", "COST", "COTY", "CPB", "CRM", "CSCO", "CSRA", "CSX", "CTAS", "CTL", "CTSH", "CTXS", "CVS", "CVX", "CXO", "D", "DAL", "DE", "DFS", "DG", "DGX", "DHI", "DHR", "DIS", "DISCA", "DISCK", "DLPH", "DLR", "DLTR", "DNB", "DOV", "DPS", "DRI", "DTE", "DUK", "DVA", "DVN", "EA", "EBAY", "ECL", "ED", "EFX", "EIX", "EL", "EMN", "EMR", "EOG", "EQIX", "EQR", "EQT", "ES", "ESRX", "ESS", "ETFC", "ETN", "ETR", "EVHC", "EW", "EXC", "EXPD", "EXPE", "EXR", "F", "FAST", "FB", "FBHS", "FCX", "FDX", "FE", "FFIV", "FIS", "FISV", "FITB", "FL", "FLIR", "FLR", "FLS", "FMC", "FOX", "FOXA", "FRT", "FSLR", "FTI", "FTR", "FTV", "GD", "GE", "GGP", "GILD", "GIS", "GLW", "GM", "GOOG", "GOOGL", "GPC", "GPN", "GPS", "GRMN", "GS", "GT", "GWW", "HAL", "HAS", "HBAN", "HBI", "HCA", "HCN", "HCP", "HD", "HES", "HIG", "HOG", "HOLX", "HON", "HP", "HPE", "HPQ", "HRB", "HRL", "HRS", "HSIC", "HST", "HSY", "HUM", "IBM", "ICE", "IDXX", "IFF", "ILMN", "INCY", "INTC", "INTU", "IP", "IPG", "IR", "IRM", "ISRG", "ITW", "IVZ", "JBHT", "JCI", "JEC", "JNJ", "JNPR", "JPM", "JWN", "K", "KEY", "KHC", "KIM", "KLAC", "KMB", "KMI", "KMX", "KO", "KORS", "KR", "KSS", "KSU", "L", "LB", "LEG", "LEN", "LH", "LKQ", "LLL", "LLY", "LMT", "LNC", "LNT", "LOW", "LRCX", "LUK", "LUV", "LYB", "M", "MA", "MAA", "MAC", "MAR", "MAS", "MAT", "MCD", "MCHP", "MCK", "MCO", "MDLZ", "MDT", "MET", "MHK", "MKC", "MLM", "MMC", "MMM", "MNK", "MNST", "MO", "MON", "MOS", "MPC", "MRK", "MRO", "MS", "MSFT", "MSI", "MTB", "MTD", "MU", "MUR", "MYL", "NAVI", "NBL", "NDAQ", "NEE", "NEM", "NFLX", "NFX", "NI", "NKE", "NLSN", "NOC", "NOV", "NRG", "NSC", "NTAP", "NTRS", "NUE", "NVDA", "NWL", "NWS", "NWSA", "O", "OKE", "OMC", "ORCL", "ORLY", "OXY", "PAYX", "PBCT", "PCAR", "PCG", "PCLN", "PDCO", "PEG", "PEP", "PFE", "PFG", "PG", "PGR", "PH", "PHM", "PKI", "PLD", "PM", "PNC", "PNR", "PNW", "PPG", "PPL", "PRGO", "PRU", "PSA", "PSX", "PVH", "PWR", "PX", "PXD", "PYPL", "QCOM", "QRVO", "R", "RCL", "REG", "REGN", "RF", "RHI", "RHT", "RIG", "RL", "ROK", "ROP", "ROST", "RRC", "RSG", "RTN", "SBUX", "SCG", "SCHW", "SEE", "SHW", "SIG", "SJM", "SLB", "SLG", "SNA", "SNI", "SO", "SPG", "SPGI", "SRCL", "SRE", "STI", "STT", "STX", "STZ", "SWK", "SWKS", "SWN", "SYF", "SYK", "SYMC", "SYY", "T", "TAP", "TDC", "TDG", "TEL", "TGNA", "TGT", "TIF", "TJX", "TMK", "TMO", "TRIP", "TROW", "TRV", "TSCO", "TSN", "TSS", "TWX", "TXN", "TXT", "UA", "UAA", "UAL", "UDR", "UHS", "ULTA", "UNH", "UNM", "UNP", "UPS", "URBN", "URI", "USB", "UTX", "V", "VAR", "VFC", "VIAB", "VLO", "VMC", "VNO", "VRSK", "VRSN", "VRTX", "VTR", "VZ", "WAT", "WBA", "WDC", "WEC", "WFC", "WHR", "WLTW", "WM", "WMB", "WMT", "WRK", "WU", "WY", "WYN", "WYNN", "XEC", "XEL", "XL", "XLNX", "XOM", "XRAY", "XRX", "XYL", "YUM", "ZBH", "ZION", "ZTS")
+
+seperate=c(0.05, 0.1, 0.15, 0.2, 0.25,0.3, 0.35, 0.4, 0.45,0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95)
+df.All.Stocks.bin= data.frame(matrix(ncol = 20, nrow = 0))
+x <- c("Symbal",seperate)
+colnames(df.All.Stocks.bin) <- x
+
+for(i in 1:length(name)){
+  
+  stock = getSymbols(c(name[i]), src='yahoo')
+  stock = get(stock)
+  stock <- stock[!(rowSums(is.na(stock))),]
+  colnames(stock) <- c("Open", "High", "Low", "Close", "Volume", "Adj")
+  yesterday_closePrice <- shift(v=as.numeric(stock$Close), places=1, dir="right")
+  yesterday_closePrice[1]=0
+  Change = (stock$Close - yesterday_closePrice)/yesterday_closePrice*100
+  Change[1]=0
+  names(Change) = 'Change'
+  df.stock = data.frame(stock, Change)
+  
+  bin = quantile(df.stock$Change,seperate )
+  bin=as.numeric(bin)
+  bin=append(name[i],bin)
+  
+  df.All.Stocks.bin[i,]=bin
+  removeSymbols(Symbols=name[i],env=.GlobalEnv)
+  
+  
+}
+df.All.Stocks.bin[,2:20] <- lapply(df.All.Stocks.bin[,2:20], function(x) as.numeric(as.character(x)))
+class(df.All.Stocks.bin[2,2])
+vector_0.5=df.All.Stocks.bin$`0.5` >0.1
+All.Best.Stocks=df.All.Stocks.bin[vector_0.5,]
+
+```
+
+```{r}
+df2 <- scale(All.Best.Stocks[,2:20]) 
+df2=cbind(Symbal=All.Best.Stocks[,1],df2)
+plot(df2)
+
+
+km <- kmeans(df2[,2:20], centers = 3)
+plot(df2[,1], df2[,2], cex = 0.5, col=km$cluster)
+
+df2=cbind(Cluster=km$cluster,df2)
+View(df2)
+df2=data.frame(df2)
+Stock.Group=df2[which(df2$Cluster==3),2]
+View(Stock.Group)
+
+```
+
+# Choose stocks and build RF and GBM predict models:
+```{r}
+#install.packages('quantmod')
+#install.packages('binhf')
+#library(binhf)
+#library(quantmod)
+#library(xts)
+#All_Stocks=c('GOOGL','AAPL','AMZN')
+
+set.seed(15)
+name=sample(name)
+Stock.Group=as.character(name[1:4])
+All.Stocks.Prediction=data.frame()
+
+for(i in 1:length(Stock.Group)){
+    upOrDown=c()
+  getSymbols(Stock.Group[i], src='yahoo')
+    MainStock=na.omit(get(Stock.Group[i]))
+    if(length(MainStock[,1])>1500){
+    colnames(MainStock) <- c("Open", "High", "Low", "Close", "Volume", "Adj")
+    Stock=MainStock
+    
+    ## preper the data:
+    Stock=addInd(Stock)
+    Stock=add.data.frame(Stock)
+    ##Choose what to predict (build Y)
+    Stock$Up_Down=computeY(Stock)
+    Stock=na.omit(Stock[1:(nrow(Stock)-30),])
+    colUP_Down=colnames(Stock)=='Up_Down'
+    upOrDown= append(upOrDown, Stock[, colUP_Down])
+   
+    form <- Stock$Up_Down ~ .^2
+    options(na.action="na.pass")
+    Stock = model.matrix(form, data = Stock)
+    Stock=Stock[,-c(1)]
+    
+    
+    removeSymbols(Symbols=Stock.Group[i],env=.GlobalEnv)
+
+
+##PcA
+
+pc = prcomp(Stock, center = TRUE, scale. = TRUE) 
+pc.var =pc$sdev ^2
+pc.per = pc.var/sum(pc.var)
+plot(pc.per[1:30])
+
+Up_Down=upOrDown
+Stock<-data.frame(Up_Down,pc$x[,1:30])
+
+
+   # Split to train 80% and test 20%
+  bound <- floor((nrow(Stock)/5)*4)
+  df.train <- Stock[1:bound, ]
+    df.test <- Stock[(bound+1):nrow(Stock), ]
+    
+    ### Random Forest (RF)
+    #### Model learning on Train data
+    #### Run the tree model for all predictors, and then view the model summary and plot:
+    
+    #install.packages("randomForest")
+    #library(randomForest)
+    
+    set.seed(9) #RF includes random selection. Repeat same seed to repeat the RF
+    Stock.RF <- randomForest(factor(Up_Down) ~. , data = df.train ,na.action=na.exclude) #Train with all predictors
+    fitted.results.RF=predict(Stock.RF,df.test, type = "prob")
+     summary(fitted.results.RF)
+    
+   # plot(Stock.RF)
+    #importance(Stock.RF)
+   # varImpPlot(Stock.RF)
+    
+    threshold <- 0.6
+    prediction <- ifelse(fitted.results.RF[,2] > threshold,1,0)
+ 
+
+    cross.table <- table(prediction, df.test$Up_Down )
+    if(length( cross.table[,1])>1){
+    
+    ###From the table you can calculate manualy all KPIs:
+    
+    acc=(cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1]) #accuracy 
+    prec=cross.table[2,2]/(cross.table[2,2]+cross.table[2,1]) #precision
+    rec=cross.table[2,2]/(cross.table[2,2]+cross.table[1,2]) #Recall
+    
+    summary_data=data.frame(Accuracy=acc ,Precision=prec , Recall=rec)
+   
+    All.Stocks.Prediction=rbind(All.Stocks.Prediction,add.prediction.row(Stock.Group[i],"RF",summary_data,cross.table[1,1],cross.table[1,2],cross.table[2,1],cross.table[2,2]))
+
+    }
+     
+  
+
+    ###GBM:
+    threshold <- 0.6
+    set.seed(7) #GBM includes random selection. Repeat same seed to repeat the RF
+    Stock.GBM <- gbm (Up_Down ~ . , data = df.train, n.trees = 1000, interaction.depth = 4, shrinkage = 0.2, verbose = F) #gbm 
+    fitted.results.GBM <- predict(Stock.GBM,df.test, n.trees = 1000, type="response")
+      prediction.GBM <- ifelse(fitted.results.GBM > threshold,1,0)
+ 
+    cross.table.GBM <- table(prediction.GBM, df.test$Up_Down )
+    if(length( cross.table.GBM[,1])>1){
+    
+    ###From the table you can calculate manualy all KPIs:
+    
+    acc.GBM=(cross.table.GBM[1,1]+cross.table.GBM[2,2])/ (cross.table.GBM[1,1]+cross.table.GBM[2,2]+cross.table.GBM[1,2]+cross.table.GBM[2,1]) #accuracy 
+    prec.GBM=cross.table.GBM[2,2]/(cross.table.GBM[2,2]+cross.table.GBM[2,1]) #precision
+    rec.GBM=cross.table.GBM[2,2]/(cross.table.GBM[2,2]+cross.table.GBM[1,2]) #Recall
+    
+    summary_data.GBM=data.frame(Accuracy=acc.GBM ,Precision=prec.GBM , Recall=rec.GBM)
+    summary_data.GBM 
+    
+    All.Stocks.Prediction=rbind(All.Stocks.Prediction,add.prediction.row(Stock.Group[i],"GBM",summary_data.GBM,cross.table.GBM[1,1],cross.table.GBM[1,2],cross.table.GBM[2,1],cross.table.GBM[2,2]))
+    }  
+    
+    Stock.logit <- glm(Up_Down ~ ., data = df.train, family = binomial)
+    fitted.results.logit <- predict(Stock.logit,df.test,type='response')
+    threshold <- 0.6
+    prediction.logit <- ifelse(fitted.results.logit > threshold,1,0)
+    cross.table.logit <- table(prediction.logit, df.test$Up_Down )
+   if(length( cross.table.logit[,1])>1){
+        acc.logit=(cross.table.logit[1,1]+cross.table.logit[2,2])/ (cross.table.logit[1,1]+cross.table.logit[2,2]+cross.table.logit[1,2]+cross.table.logit[2,1]) #accuracy 
+    prec.logit=cross.table.logit[2,2]/(cross.table.logit[2,2]+cross.table.logit[2,1]) #precision
+    rec.logit=cross.table.logit[2,2]/(cross.table.logit[2,2]+cross.table.logit[1,2]) #Recall
+    
+    summary_data.logit=data.frame(Accuracy=acc.logit ,Precision=prec.logit , Recall=rec.logit)
+    summary_data.logit  
+    
+     All.Stocks.Prediction=rbind(All.Stocks.Prediction,add.prediction.row(Stock.Group[i],"GLM",summary_data.logit,cross.table.logit[1,1],cross.table.logit[1,2],cross.table.logit[2,1],cross.table.logit[2,2]))
+   }
+    }
+    else {removeSymbols(Symbols=Stock.Group[i],env=.GlobalEnv)}
+    
+    }  
+    All.Stocks.Prediction=All.Stocks.Prediction[order(-All.Stocks.Prediction$Precision,-All.Stocks.Prediction$cross.table22),]
+
+    
+    View(All.Stocks.Prediction)
+   
+  
+```
+
+#Do Predict model to the best Stock Prediction
+
+```{r}
+  upOrDown=c()
+    symboll='GOOG'
+  getSymbols(symboll, src='yahoo')
+    MainStock=na.omit(get(symboll))
+        colnames(MainStock) <- c("Open", "High", "Low", "Close", "Volume", "Adj")
+    Stock=MainStock
+    
+    ## preper the data:
+    Stock=addInd(Stock)
+    Stock=add.data.frame(Stock)
+    ##Choose what to predict (build Y)
+    Stock$Up_Down=computeY(Stock)
+    Stock=na.omit(Stock[1:(nrow(Stock)-1),])
+    colUP_Down=colnames(Stock)=='Up_Down'
+    upOrDown= append(upOrDown, Stock[, colUP_Down])
+   
+    form <- Stock$Up_Down ~ .^2
+    options(na.action="na.pass")
+    Stock = model.matrix(form, data = Stock)
+    Stock=Stock[,-c(1)]
+    
+        removeSymbols(Symbols=symboll,env=.GlobalEnv)
+
+
+      ##PcA
+      
+      pc = prcomp(Stock, center = TRUE, scale. = TRUE) 
+      pc.var =pc$sdev ^2
+      pc.per = sum(pc.var[1:30])/sum(pc.var)
+      plot(pc.per[1:50])
+      
+      Up_Down=upOrDown
+      Stock<-data.frame(Up_Down,pc$x[,1:30])
+      
+         # Split to train 80% and test 20%
+  bound <- floor((nrow(Stock)/5)*4)
+  df.train <- Stock[1:bound, ]
+    df.test <- Stock[(bound+1):nrow(Stock), ]
+    ```
+    
+#random Forest
+```{r}    
+      set.seed(9) #RF includes random selection. Repeat same seed to repeat the RF
+    Stock.RF <- randomForest(factor(Up_Down) ~. , data = df.train ,na.action=na.exclude) #Train with all predictors
+    fitted.results.RF=predict(Stock.RF,df.test, type = "prob")
+     summary(fitted.results.RF)
+    
+   # plot(Stock.RF)
+    #importance(Stock.RF)
+   # varImpPlot(Stock.RF)
+    
+    threshold <- 0.6
+    prediction <- ifelse(fitted.results.RF[,2] > threshold,1,0)
+ 
+
+    cross.table <- table(prediction, df.test$Up_Down )
+  
+    
+    ###From the table you can calculate manualy all KPIs:
+    
+    acc=(cross.table[1,1]+cross.table[2,2])/ (cross.table[1,1]+cross.table[2,2]+cross.table[1,2]+cross.table[2,1]) #accuracy 
+    prec=cross.table[2,2]/(cross.table[2,2]+cross.table[2,1]) #precision
+    rec=cross.table[2,2]/(cross.table[2,2]+cross.table[1,2]) #Recall
+    
+    summary_data=data.frame(Accuracy=acc ,Precision=prec , Recall=rec)
+   summary_data
+   cross.table
+   
+```
+   
+#GLM   
+```{r}
+#GLM
+    
+    Stock.logit <- glm(Up_Down ~ ., data = df.train, family = binomial)
+    fitted.results.logit <- predict(Stock.logit,df.test,type='response')
+    threshold <- 0.6
+    prediction <- ifelse(fitted.results.logit > threshold,1,0)
+    cross.table.logit <- table(prediction, df.test$Up_Down )
+  
+        acc.logit=(cross.table.logit[1,1]+cross.table.logit[2,2])/ (cross.table.logit[1,1]+cross.table.logit[2,2]+cross.table.logit[1,2]+cross.table.logit[2,1]) #accuracy 
+    prec.logit=cross.table.logit[2,2]/(cross.table.logit[2,2]+cross.table.logit[2,1]) #precision
+    rec.logit=cross.table.logit[2,2]/(cross.table.logit[2,2]+cross.table.logit[1,2]) #Recall
+    
+    summary_data.logit=data.frame(Accuracy=acc.logit ,Precision=prec.logit , Recall=rec.logit)
+    cross.table.logit
+    summary_data.logit
+
+```
+
+#Plot the result of the prediction:
+
+```{r}
+    
+df.test$prediction=prediction
+df.train$prediction=df.train$Up_Down
+df=merge(df.train,df.test, by="row.names",all = TRUE,join ='left')
+df$prediction.y[is.na(df$prediction.y)] <- 1
+df$prediction.x[is.na(df$prediction.x)] <- 1
+df$joinPrediction=df$prediction.y*df$prediction.x
+
+df <- xts(df[,-1], order.by=as.Date(as.character(df[,1]),"%Y-%m-%d"))
+MainStock=merge(MainStock,df,all = TRUE)[,-c(7:70)]
+
+
+   
+# look for long entries
+Long_Trades <- ifelse( MainStock$joinPrediction  == 1 ,MainStock$Close,NA)
+
+Long_Trades <- ifelse(shift(v=as.numeric(MainStock$joinPrediction), places=1, dir="right")==1 & MainStock$joinPrediction==0  , -1 * MainStock$Close, Long_Trades)
+
+#exit_Long_Trades <- ifelse(shift(v=as.numeric(Point), places=2, dir="right")==1& shift(v=as.numeric(Point), places=1, dir="right")==0 & Point==0  , MainStock$Close,NA)
+
+# look for short entries
+#Short_Trades <- ifelse(     Point==0, MainStock$Close, NA) 
+
+MainStock$Long_Trades=Long_Trades
+#MainStock$exitLong=exit_Long_Trades
+ProfitLoss_Calculator(MainStock[c((nrow(MainStock)-length(df.test[,1])+1):nrow(MainStock)),])
+
+
+plot(MainStock$Close ,subset="")
+events <- xts("80/20", 
+              (c(index(MainStock[bound,]))))
+addEventLines(events, srt=90, pos=2,lty = 1, lwd = 1, col = 1)
+points(MainStock$Long_Trades, col='green', cex=2, pch=18 )
+#points(MainStock$exitLong, col='red', cex=2.5, pch=18)
+
+```
