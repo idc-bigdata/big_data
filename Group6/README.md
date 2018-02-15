@@ -3,7 +3,7 @@
 ## Medical Appointment No Shows
 #### Why do 20% of patients miss their scheduled appointments?
 
-* The data is taken from the city of Vitória, Espírito Santo - Brazil
+The data is taken from the city of Vitória, Espírito Santo - Brazil
 
 ---
 ## Team naming list
@@ -12,7 +12,8 @@
 - Mor Gringarten
 - Rony Zucker
 
-## Files
+## Directory Structure
+```
 --code
 	NoShow - Complete Analysis.Rmd - Main data analysis R script
 	geocoder.py - Python geo decoder script - output is under datasets/geod2ata.csv
@@ -24,4 +25,4 @@
 	geod2ata.csv - Geo data CSV file
 	KaggleV2-May-2016-Fixed_Names.csv - Original Kaggle file
 	APPOINTMENT_COUNTS.csv - calculation file
-
+```
