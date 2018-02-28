@@ -30,6 +30,7 @@ Blog post by Bruno Stecanella at <https://monkeylearn.com/blog/machine-learning-
 As for the conclusions of the data - more reviews were positive, out of the negative reviews London was awarded with the highest percentage of negative reviews, there is a positive correlation between number of start to the positive percentage of reviews.
 
 
+
 <h2>Data description</h2>
 
 | Var label                                  | Var description                                                                                                                                              | Var type | Possible values and value                                                                                                | Min. | 1st Qu. | Median | Mean        | 3rd Qu. | Max.  | Missing Values |
