@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+		<title>Chatbot</title>
+		<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Hind:300,400,500,600,700">
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/material-design-iconic-font/2.2.0/css/material-design-iconic-font.min.css">
+		<link rel="stylesheet" href="css/reset.css">
+		<link rel="stylesheet" href="css/chat.css">
+	</head>
+	<body>
+		<div class="chat js-chat">
+			<header class="chat__header">
+				<h1 class="chat__title">
+					Chat
+				</h1>
+			</header>
+			<div class="chat__body">
+				<div class="chat__inner">
+					<div class="chat__messenger js-chat__messenger"></div>
+					<div class="chat__typer js-chat__typer"></div>
+				</div>
+			</div>
+			<footer class="chat__footer">
+				<input type="text" name="chat__input" class="chat__input js-chat__input">
+				<button type="submit" name="chat__submit" class="chat__submit js-chat__submit">
+					Send
+				</button>
+			</footer>
+		</div>
+		<div class="templates hidden">
+			<div class="templates__template" id="chat__message">
+				<div class="chat__message js-chat__message">
+					<div class="chat__avatar js-chat__avatar">
+						<img class="img img--responsive img--circle" src="#" alt="">
+					</div>
+					<div class="chat__bubble js-chat__bubble"></div>
+				</div>
+			</div>
+			<div class="templates__template" id="chat__typing">
+				<div class="chat__message chat__message--typing js-chat__message">
+					<div class="chat__avatar js-chat__avatar">
+						<img class="img img--responsive img--circle" src="#" alt="">
+					</div>
+					<div class="chat__bubble">
+						<div class="chat__typing">
+							<i class="zmdi zmdi-more"></i>
+						</div>
+					</div>
+				</div>
+			</div>
+			<div class="templates__template" id="chat__emoji">
+				<img class="chat__emoji js-chat__emoji" title="" src="#">
+			</div>
+		</div>
+		<script src="js/vendors/jquery-3.1.0.min.js"></script>
+		<script src="js/controller/EventDispatcher.js"></script>
+		<script src="js/helper/ChatHelper.js"></script>
+		<script src="js/service/SentenceService.js"></script>
+		<script src="js/service/EmojiService.js"></script>
+		<script src="js/model/ChatModel.js"></script>
+		<script src="js/view/ChatView.js"></script>
+		<script src="js/controller/ChatController.js"></script>
+		<script src="js/Chat.js"></script>
+	</body>
+</html>

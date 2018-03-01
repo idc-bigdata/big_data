@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Booking.com: 1,656,473 hotels worldwide. 144+ million hotel reviews.</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/style.css">
+    <link href="http://afeld.github.io/emoji-css/emoji.css" rel="stylesheet">
+    <link rel="shortcut icon" href="https://q.bstatic.com/static/img/b25logo/favicon/ebc77706da3aae4aee7b05dadf182390f0d26d11.ico" />
+    <link rel="apple-touch-icon" href="https://r.bstatic.com/static/img/apple-touch-icon/c9b35bf29a75cac2f430f80a5d4bc7fd961d21a7.png" />
+    <link rel="help" href="/faq.en-gb.html?label=gen173nr-1DCAEoggJCAlhYSDNYBGhqiAEBmAEuuAEHyAEM2AED6AEBkgIBeagCAw;sid=4bdc294e091017ecaeb95c8c9f787e0c;" />
+    <link rel="search" type="application/opensearchdescription+xml" href="https://r.bstatic.com/static/opensearch/en-gb/4e7571db3e3392305a9bed7c8dae0d335160dc74.xml" title="Booking.com online hotel reservations" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+    <!-- jQuery library -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+
+    <!-- Latest compiled JavaScript -->
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+    <script src="script/script.js"></script>
+    <script src="script/msg.js"></script>
+    <script src="script/conversation.js"></script>
+    <script src='https://code.responsivevoice.org/responsivevoice.js'></script>
+</head>
+<body>
+<iframe class="iframe-booking" src="https://www.booking.com/"></iframe>
+<div class="container">
+    <div class="chat-avatar"><img src="files/noki-av.png"></div>
+    <div class="row chat-window col-xs-5 col-md-3" id="chat_window_1" style="margin-left:10px;">
+        <div class="col-xs-12 col-md-12">
+            <div class="panel panel-default">
+                <div class="panel-heading top-bar">
+                    <div class="col-md-8 col-xs-8 toggle-chat"  style="cursor: pointer">
+                        <h3 class="panel-title"><span class="glyphicon glyphicon-comment"></span> Noky SmartBot</h3>
+                    </div>
+                    <div class="col-md-4 col-xs-4" style="text-align: right;">
+                        <!--<a href="#"><span id="minim_chat_window" class="glyphicon icon_minim panel-collapsed glyphicon-plus"></span></a>-->
+                        <a href="#"><span class="glyphicon close-chat glyphicon-minus"></span></a>
+                    </div>
+                </div>
+                <div class="panel-body msg_container_base" style="display: none;">
+                    <div id="chatbox">
+                    </div>
+                </div>
+            <div class="panel-footer">
+                    <div class="input-group">
+                        <span class="input-group-btn">
+                            <button class="btn btn-primary btn-sm" id="record-btn" onclick="waitForSubmit();"><i class="fa fa-microphone"></i></button>
+                        </span>
+                        <input id="btn-input" type="text" class="form-control input-sm chat_input" placeholder="Write your message here..." />
+                        <span class="input-group-btn">
+                            <button class="btn btn-primary btn-sm" id="btn-chat">Send</button>
+                        </span>
+                    </div>
+                </div>
+        </div>
+    </div>
+</div>
+
+<div id="left-gallery" style="display: none;">
+    <div class="container">
+        <div class="row">
+            <div class="col-md-12">
+                <img data-href="https://www.booking.com/hotel/gb/park-plaza-waterloo-london.en-gb.html" src="files/hotel1.png">
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-12">
+                <img data-href="" src="files/hotel2.png">
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-12">
+                <img data-href="" src="files/hotel3.png">
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-12">
+                <img data-href="" src="files/hotel4.png">
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-12">
+                <img data-href="" src="files/hotel5.png">
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-12">
+                <img data-href="" src="files/hotel6.png">
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-12">
+                <img data-href="" src="files/hotel7.png">
+            </div>
+        </div>
+    </div>
+</div>
+
+    <!--<div class="btn-group dropup">-->
+        <!--<button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown">-->
+            <!--<span class="glyphicon glyphicon-cog"></span>-->
+            <!--<span class="sr-only">Toggle Dropdown</span>-->
+        <!--</button>-->
+        <!--<ul class="dropdown-menu" role="menu">-->
+            <!--<li><a href="#" id="new_chat"><span class="glyphicon glyphicon-plus"></span> Novo</a></li>-->
+            <!--<li><a href="#"><span class="glyphicon glyphicon-list"></span> Ver outras</a></li>-->
+            <!--<li><a href="#"><span class="glyphicon glyphicon-remove"></span> Fechar Tudo</a></li>-->
+            <!--<li class="divider"></li>-->
+            <!--<li><a href="#"><span class="glyphicon glyphicon-eye-close"></span> Invisivel</a></li>-->
+        <!--</ul>-->
+    <!--</div>-->
+<!--</div>-->
+    <script src="script/listen.js"></script>
+</body>
+</html>
