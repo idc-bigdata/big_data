@@ -1,7 +1,7 @@
 <h1>Codebook for Hotel Reviews Dataset</h1>
 Hotels reviews - https://www.kaggle.com/jiashenliu/515k-hotel-reviews-data-in-europe
 <br>
-Noky - Demo - http://bit.ly/booking-noky
+Noky - Demo - http://booking-noky.tk/
 
 <h3>Team</h3>
 Noa Barbiro, Yanir Calisar, Koby (Yaakov) Shmama
