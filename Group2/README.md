@@ -10,8 +10,6 @@ Noa Barbiro, Yanir Calisar, Koby (Yaakov) Shmama
 This data set located can be downloaded from Kaggle data sets, originated from Booking.com and includes 515,739 anonymized users reviews of hotels across Europe (including text reviews and ratings) in the timeframe ranging from 8/4/2015 to 8/3/2017.
 The direct link to data is: <https://www.kaggle.com/jiashenliu/515k-hotel-reviews-data-in-europe>
 
-
-
 <h3>Business Goals</h3>
 <b>This data collected could be used to answer the following questions:</b>
 1. Which hotels are rated higher or lower than other based on guests’ reviews?
@@ -23,6 +21,7 @@ The direct link to data is: <https://www.kaggle.com/jiashenliu/515k-hotel-review
 7. If a successful SPA chain would like to open new branch - which of the hotels it should choose to do so?
 8. Is there a correlation between number of reviews the reviewer has given to their being more positive or negative?
 9. How are Israel hotels ranked vs. rest of Europe hotels?
+
 
 <b>Who needs to review your business questions before you analyze?</b>
 Depending on the business question raised, mainly review the data to ensure its completeness and integrity (full sequence over time, no missing records).
