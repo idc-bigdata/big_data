@@ -1,0 +1,252 @@
+---
+title: "Clusters"
+author: "Group2_NLP"
+date: "March 4, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#Clusters:
+df.hotel  = read.csv("C:/Users/shamak/Dropbox/MBA/ML/Hotel_G2/Hotels_Review_Aggregated_2.csv")
+
+
+#Creating Subset of the united kingdom
+df.hotel.uk <- df.hotel[which(grepl("United Kingdom",df.hotel$Country)),]
+
+#Checking to see which paramaters to run the model on...
+pairs(df.hotel.uk[6:25], col = "blue", cex = 0.5, upper.panel = NULL)
+cor (df.hotel.uk[6:25],df.hotel.uk[6:25])
+
+
+#***********************************PCA***************************************************************
+#Part 1 - Plotting the data to check for segmentation...
+
+
+library("scatterplot3d")
+#Shuffel the rows inside subset of the data.
+d <- df.hotel.uk[sample(nrow(df.hotel.uk)),]
+#Insert into dfs only the numeric values from the Dataset
+dfs <- d[1:100,6:25] 
+#Plotting DFS in 3D. Average Score + Total Stay Duration + Number of Reviews.
+s3d <- scatterplot3d(dfs$Average_Score,dfs$Complains_Breakfast,dfs$Complains_Price,main="3D Scatterplot",color=dfs$Num_of_Reviews+1)
+s3d <- scatterplot3d(dfs$Average_Score,dfs$Complains_Breakfast,dfs$Businesses_1km,main="3D Scatterplot",color=dfs$Num_of_Reviews+1)
+s3d <- scatterplot3d(dfs$Average_Score,dfs$Complains_Breakfast,dfs$Num_of_Reviews,main="3D Scatterplot",color=dfs$Num_of_Reviews+1)
+s3d <- scatterplot3d(dfs$Average_Score,dfs$Businesses_1km,dfs$Businesses_5km,main="3D Scatterplot",color=dfs$Num_of_Reviews+1)
+
+#Part 2 - PCA the data...
+
+pc = prcomp(d[,6:25], center = TRUE, scale. = TRUE)
+pc
+#Pet Stay
+#Complains_Wifi
+#family_with_older_stays
+#family_with_younger_stays
+#Businesses_100m
+#Businesses_1km
+
+#select the number of components
+pc.var =pc$sdev ^2
+pc.per = pc.var/sum(pc.var)
+plot(pc.per)
+biplot(pc, cex=0.5)
+#*****************************************************************************************************
+
+#***************************HRC************************************************************************
+#Creating HRC on the Data, in order to make sure on which level to cut the tree.
+Distance = dist(df.hotel.uk, method = "euclidian")
+hc <- hclust(Distance, method = "complete")
+hc
+plot(hc)
+hc6 <- cutree(hc, k=6)
+hc6
+#plot(df.uk$x, df.uk$y, cex = 0.5, col=hc6)
+#******************************************************************************************************
+
+
+#***************************************K-MEANS********************************************************
+#Checking Clustering with diffrent Method.
+#Running on all parametes to "fill" the model
+km1 <- kmeans(df.hotel.uk[6:25], centers=6)
+km1
+plot(df.hotel.uk,cex=0.5,col = km1$cluster)
+
+#Plotting also all the attributes of the travelres types
+km1 <- kmeans(df.hotel.uk[9:16], centers=8)
+km1
+plot(df.hotel.uk,cex=0.5,col = km1$cluster)
+
+
+#******************************************************************************************************
+
+#Taking the K-Means to find clustering between two parametes.
+
+#*****************************x=total_stay_duration,y=df.hotel.uk$Num_of_Reviews***********************
+df.uk <- data.frame(x=df.hotel.uk$total_stay_duration ,y=df.hotel.uk$Num_of_Reviews)
+km1 <- kmeans(df.uk, centers=6)
+km1
+plot(df.uk$x,df.uk$y,cex=1,col=km1$cluster,xlab="total_stay_duration",ylab = "Num_of_Reviews",pch=16)
+
+
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#Scaling the paramaters
+df.uk <- data.frame(x=scale(df.hotel.uk$total_stay_duration) ,y=scale(df.hotel.uk$Num_of_Reviews))
+km1 <- kmeans(df.uk, centers=6)
+km1
+plot(df.uk$x,df.uk$y,cex=1,col=km1$cluster,xlab="total_stay_duration",ylab = "Num_of_Reviews",pch=16)
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+#******************************************************************************************************
+
+#*****************************x=business_trips ,y=df.hotel.uk$solo_stays*******************************
+df.uk <- data.frame(x=df.hotel.uk$business_trips ,y=df.hotel.uk$solo_stays)
+km2 <- kmeans(df.uk, centers=2)
+km2
+plot(df.uk$x,df.uk$y,cex=1,col=km2$cluster,xlab="business_trips ",ylab = "solo_stays",pch=16)
+
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#Scaling the paramaters
+df.uk <- data.frame(x=scale(df.hotel.uk$business_trips) ,y=scale(df.hotel.uk$solo_stays))
+km2 <- kmeans(df.uk, centers=6)
+km2
+plot(df.uk$x,df.uk$y,cex=1,col=km2$cluster,xlab="business_trips",ylab = "solo_stays",pch=16)
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+#******************************************************************************************************
+
+#*****************************x=resident_stays ,y=df.hotel.uk$Avg_Stay_Duration************************
+df.uk <- data.frame(x=df.hotel.uk$resident_stays,y=df.hotel.uk$Avg_Stay_Duration)
+km3 <- kmeans(df.uk, centers=5)
+km3
+plot(df.uk$x,df.uk$y,cex=1,col=km3$cluster,xlab="resident_stays",ylab = "Avg_Stay_Duration",pch=16)
+
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#Scaling the paramaters
+df.uk <- data.frame(x=scale(df.hotel.uk$resident_stays) ,y=scale(df.hotel.uk$Avg_Stay_Duration))
+km3 <- kmeans(df.uk, centers=6)
+km3
+plot(df.uk$x,df.uk$y,cex=1,col=km3$cluster,xlab="resident_stays",ylab = "Avg_Stay_Duration",pch=16)
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+#******************************************************************************************************
+
+#Buisness Man clustering with complains
+#********************x=df.hotel.uk$Complains_Breakfast,y=df.hotel.uk$business_trips********************
+df.uk <- data.frame(x=df.hotel.uk$Complains_Breakfast,y=df.hotel.uk$business_trips)
+km4 <- kmeans(df.uk, centers=6)
+km4
+plot(df.uk$x,df.uk$y,cex=1,col=km4$cluster,xlab="Complains_Breakfast",ylab = "business_trips",pch=16)
+
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#Scaling the paramaters
+df.uk <- data.frame(x=scale(df.hotel.uk$Complains_Breakfast) ,y=scale(df.hotel.uk$business_trips))
+km4 <- kmeans(df.uk, centers=6)
+km4
+plot(df.uk$x,df.uk$y,cex=1,col=km4$cluster,xlab="Complains_Breakfast",ylab = "business_trips",pch=16)
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+#******************************************************************************************************
+
+#********************x=df.hotel.uk$Complains_Price,y=df.hotel.uk$business_trips************************
+df.uk <- data.frame(x=df.hotel.uk$Complains_Price,y=df.hotel.uk$business_trips)
+km5 <- kmeans(df.uk, centers=6)
+km5
+plot(df.uk$x,df.uk$y,cex=1,col=km5$cluster,xlab="Complains_Price",ylab = "business_trips",pch=16)
+
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#Scaling the paramaters
+df.uk <- data.frame(x=scale(df.hotel.uk$Complains_Price) ,y=scale(df.hotel.uk$business_trips))
+km5 <- kmeans(df.uk, centers=6)
+km5
+plot(df.uk$x,df.uk$y,cex=1,col=km5$cluster,xlab="Complains_Price",ylab = "business_trips",pch=16)
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+#******************************************************************************************************
+
+#********************x=df.hotel.uk$Complains_Wifi,y=df.hotel.uk$business_trips*************************
+df.uk <- data.frame(x=df.hotel.uk$Complains_Wifi,y=df.hotel.uk$business_trips)
+km6 <- kmeans(df.uk, centers=6)
+km6
+plot(df.uk$x,df.uk$y,cex=1,col=km6$cluster,xlab="Complains_Wifi",ylab = "business_trips",pch=16)
+
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#Scaling the paramaters
+df.uk <- data.frame(x=scale(df.hotel.uk$Complains_Wifi) ,y=scale(df.hotel.uk$business_trips))
+km6 <- kmeans(df.uk, centers=6)
+km6
+plot(df.uk$x,df.uk$y,cex=1,col=km6$cluster,xlab="Complains_Wifi",ylab = "business_trips",pch=16)
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+#******************************************************************************************************
+
+
+#******************************************************************************************************
+library("dbscan")
+
+df.uk1 <- data.frame(x=scale(df.hotel.uk$total_stay_duration) ,y=scale(df.hotel.uk$Num_of_Reviews))
+df.uk2 <- data.frame(x=scale(df.hotel.uk$business_trips) ,y=scale(df.hotel.uk$solo_stays))
+df.uk3 <- data.frame(x=scale(df.hotel.uk$resident_stays) ,y=scale(df.hotel.uk$Avg_Stay_Duration))
+df.uk4 <- data.frame(x=scale(df.hotel.uk$Complains_Breakfast) ,y=scale(df.hotel.uk$business_trips))
+df.uk5 <- data.frame(x=scale(df.hotel.uk$Complains_Price) ,y=scale(df.hotel.uk$business_trips))
+df.uk6 <- data.frame(x=scale(df.hotel.uk$Complains_Wifi) ,y=scale(df.hotel.uk$business_trips))
+
+
+dbs <- dbscan(df.uk1, MinPts = 25, eps = 0.05)
+dbs
+dbs$cluster
+plot(df.uk1$x, df.uk1$y, cex = 1,xlab="total_stay_duration",ylab="Num_of_Reviews", col=dbs$cluster,pch=16)
+
+
+dbs <- dbscan(df.uk2, MinPts = 25, eps = 0.05)
+dbs
+dbs$cluster
+plot(df.uk1$x, df.uk2$y, cex = 1,xlab="business_trips",ylab="solo_stays", col=dbs$cluster,pch=16)
+
+dbs <- dbscan(df.uk3, MinPts = 25, eps = 0.05)
+dbs
+dbs$cluster
+plot(df.uk1$x, df.uk3$y, cex = 1,xlab="resident_stays",ylab="Avg_Stay_Duration", col=dbs$cluster,pch=16)
+
+dbs <- dbscan(df.uk4, MinPts = 25, eps = 0.05)
+dbs
+dbs$cluster
+plot(df.uk1$x, df.uk4$y, cex = 1,xlab="Complains_Breakfast",ylab="business_trips", col=dbs$cluster,pch=16)
+
+dbs <- dbscan(df.uk5, MinPts = 25, eps = 0.05)
+dbs
+dbs$cluster
+plot(df.uk1$x, df.uk5$y, cex = 1,xlab="Complains_Price",ylab="business_trips", col=dbs$cluster,pch=16)
+
+dbs <- dbscan(df.uk6, MinPts = 25, eps = 0.05)
+dbs
+dbs$cluster
+plot(df.uk1$x, df.uk6$y, cex = 1,xlab="Complains_Wifi",ylab="business_trips", col=dbs$cluster,pch=16)
+
+#******************************************************************************************************
+
+
+plot(df.hotel.uk$lng, df.hotel.uk$lat, col = km1$cluster, pch = 20)
+lng <-df.hotel.uk$lng
+kmloc <- kmeans(cbind(df.hotel.uk$lng, df.hotel.uk$lat), centers = 10)
+plot(df.hotel.uk$lng, df.hotel.uk$lat, col = kmloc$cluster, pch = 20)
+```
+```{r}
+library(ggmap)
+qmap('London')
+map <- qmap('London', zoom = 12, maptype = 'hybrid')
+map + geom_point(data = df.hotel.uk, aes(x = lng, y = lat), color=kmloc$cluster, size=3, alpha=0.5)
+```
+```{r}
+dbsloc <- dbscan(cbind(df.hotel.uk$lat, df.hotel.uk$lng), MinPts = 25, eps = 0.05)
+dbsloc
+dbsloc$cluster
+plot(df.hotel.uk$lng, df.hotel.uk$lat, cex = 1,col=dbsloc$cluster+1,pch=16)
+map <- qmap('London', zoom = 12, maptype = 'hybrid')
+map + geom_point(data = df.hotel.uk, aes(x = lng, y = lat), color=dbsloc$cluster, size=3, alpha=0.5)
+```
