@@ -1,0 +1,183 @@
+```{r}
+library(sqldf)
+library(plotly)
+#install.packages("leaflet")
+#install.packages("leaflet.extras")
+library(leaflet)
+library(leaflet.extras)
+library(ggplot2)
+library(wordcloud2)
+library(tm)
+library(ggmap)
+library(dbscan)
+```
+
+
+---
+title: "Hotels_Review_Clustering"
+author: "Noa"
+date: "February 1, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Booking.com Hotels Review Clustering Presentation
+
+The data is a Kaggle dataset including information of close to 0.5M Hotel reviews in Europe
+https://www.kaggle.com/jiashenliu/515k-hotel-reviews-data-in-europe
+
+We will base our models and analysis on the earlier EDA and Regression work done.
+
+Lets start by uploading aggregated hotels data and visitors (based on the reviews)
+
+
+```{r }
+rm(list=ls())
+setwd("C:/Users/noaba/Documents/Private/IDC_MBA/R/Clustering")
+list.files()
+df.hotel <-read.csv("Hotels_Review_Aggregated_2.csv")
+names(df.hotel)
+```
+
+#Starting with some additional Exploratory
+
+We will see the affect of complains about the breakfast to the avg hotel score
+
+```{r }
+ggplot(df.hotel, aes(x=df.hotel$Complains_Breakfast, y=df.hotel$Average_Score)) + geom_point() +geom_smooth(method=lm, color="red") + theme_linedraw() + xlab("% Complains on Breakfast") + ylab("Avg. Score")
+```
+We will see the affect of complains about the breakfast to the avg hotel score
+
+```{r}
+ggplot(df.hotel, aes(x=df.hotel$Complains_Price, y=df.hotel$Average_Score)) + geom_point() +geom_smooth(method=lm, color="green")+ theme_linedraw() + xlab("% Complains on Price") + ylab("Avg. Score")
+
+
+ggplot(df.hotel, aes(x=(1-df.hotel$resident_stays), y=df.hotel$Avg_Stay_Duration)) + geom_point() +geom_smooth(method=lm, color="purple")+ theme_bw() + xlab("% Non Resident Stays") + ylab("Avg. Stay Duration")
+
+ggplot(df.hotel, aes(x=df.hotel$business_trips, y=df.hotel$Complains_Wifi)) + geom_point() +geom_smooth(method=lm, color="yellow")+ theme_bw() + xlab("% Business Trips") + ylab("% complains on Wifi")
+```
+
+Lets look at the distrobution of hotels over map
+
+```{r}
+leaflet(data = df.hotel)%>%addProviderTiles(providers$Stamen.TonerLite)%>%addMarkers(popup = ~df.hotel$Name,clusterOptions = markerClusterOptions())%>%addTiles()
+```
+
+
+# Filtering to London, UK hotels only
+
+Creating a subset of hotels for London UK only for the clustering practice
+To avoid local colture to skew results
+
+```{r}
+df.hotel.uk <- df.hotel[which(grepl("United Kingdom",df.hotel$Country)),]
+leaflet(data = df.hotel.uk)%>%addProviderTiles(providers$Stamen.TonerLite)%>%addMarkers(popup = ~df.hotel.uk$Name,clusterOptions = markerClusterOptions())%>%addTiles()
+```
+
+```{r}
+pairs(df.hotel.uk[6:25], col = "magenta", cex = 0.2, upper.panel = NULL)
+cor(df.hotel.uk[6:25],df.hotel.uk[6:25])
+```
+
+## Clustering Hotels By Location (Lat-Lan)
+
+We will examine two options for clustering using both DBSCAN and K-Means
+
+# Clustering Hotels by Location using K-Means
+```{r}
+set.seed(1)
+lat <- df.hotel.uk$lat
+lng <-df.hotel.uk$lng
+kmloc <- kmeans(cbind(lat, lng), centers = 8)
+plot(lng, lat, col = kmloc$cluster, pch = 20)
+```
+
+```{r}
+df.hotel.uk.kmloc <- df.hotel.uk
+df.hotel.uk.kmloc$km <-kmloc$cluster
+# Create a palette that maps factor levels to colors
+pal <- colorFactor(c("red","green","yellow","magenta", "orange", "blue","black","turquoise"), domain = c(1,2,3,4,5,6,7,8))
+
+leaflet(df.hotel.uk.kmloc) %>% addTiles() %>%
+  addCircleMarkers(
+    radius = 4,
+    color = ~pal(df.hotel.uk.kmloc$km),
+    stroke = FALSE, fillOpacity = 0.9,  popup = ~df.hotel.uk.kmloc$Name
+  ) %>% addProviderTiles(providers$Stamen.TonerLite) 
+
+
+```
+
+# Clustering Hotels by Location using DBSCAN
+```{r}
+dbsloc <- dbscan(cbind(lat, lng), MinPts = 200, eps = 0.05)
+dbsloc
+dbsloc
+plot(lng, lat, cex = 1,col=dbsloc$cluster+1,pch=16)
+```
+
+```{r}
+df.hotel.uk.dbloc <- df.hotel.uk
+df.hotel.uk.dbloc$km <-dbsloc$cluster
+# Create a palette that maps factor levels to colors
+pal <- colorFactor(c("red","blue","black"), domain = c(0,1,2))
+
+leaflet(df.hotel.uk.dbloc) %>% addTiles() %>%
+  addCircleMarkers(
+    radius = 3,
+    color = ~pal(df.hotel.uk.dbloc$km),
+    stroke = FALSE, fillOpacity = 0.9,  popup = ~df.hotel.uk.dbloc$km
+  ) %>% addProviderTiles(providers$Stamen.TonerLite) 
+
+```
+
+## PCA - Dimentionality Reduction
+
+
+``` {r}
+set.seed(1)
+pc = prcomp(df.hotel.uk[,9:15], center = TRUE, scale. = TRUE)
+pc
+```
+
+Visualizing the components
+
+``` {r}
+pc.var =pc$sdev ^2
+pc.per = pc.var/sum(pc.var)
+plot(pc.per)
+biplot(pc, cex=0.5)
+```
+
+## Personalizing Hotels by Traveler Type - Clustering
+
+```{r}
+set.seed(2)
+
+km.travel <- kmeans(df.hotel.uk[,c(9:14)], centers=3)
+
+df.hotel.uk.km <- df.hotel.uk
+df.hotel.uk.km$km <-km.travel$cluster
+
+km.travel$centers
+
+```
+
+```{r}
+# Create a palette that maps factor levels to colors
+pal <- colorFactor(c("magenta", "black", "blue"), domain = c(1, 2, 3))
+
+leaflet(df.hotel.uk.km) %>% addTiles() %>%
+  addCircleMarkers(
+    radius = 5,
+    color = ~pal(df.hotel.uk.km$km),
+    stroke = FALSE, fillOpacity = 0.8,  popup = ~df.hotel.uk.km$Name
+  ) %>% addProviderTiles(providers$CartoDB.Positron) 
+
+```
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
