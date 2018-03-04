@@ -1,0 +1,76 @@
+---
+title: "Evaluation"
+author: "Group2_NLP"
+date: "March 4, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#setting working directory
+setwd("C:/Users/shamak/Dropbox/MBA/ML/Hotel_G2")
+df.hotel  = read.csv("C:/Users/shamak/Dropbox/MBA/ML/Hotel_G2/Hotels_Review_Aggregated_2.csv")
+
+#Creating Subset of the united kingdom
+
+df.hotel.uk <- df.hotel[which(grepl("United Kingdom",df.hotel$Country)),]
+
+#plotting all possible correlations
+pairs(df.hotel.uk[6:25], col = "blue", cex = 0.5, upper.panel = NULL)
+
+library(caret)
+
+#split the data to test/train
+set.seed(100) 
+n <- nrow(df.hotel.uk)
+shuffled_df <- df.hotel.uk[sample(n), ]
+train_indices <- 1:round(0.7 * n)
+train <- shuffled_df[train_indices, ]
+test_indices <- (round(0.7 * n) + 1):n
+test <- shuffled_df[test_indices, ]
+
+```
+Running all lm with after the PCA devision
+```{r}
+
+
+
+#running Linear regression
+reg1 <- lm(formula = test$Average_Score ~ test$Complains_Breakfast)
+reg2 <- lm(formula = test$Average_Score ~ test$Complains_Price)
+reg3 <- lm(formula = test$Average_Score ~ test$Complains_Wifi)
+
+reg4 <- lm(formula = test$business_trips ~ test$Complains_Breakfast)
+reg5 <- lm(formula = test$business_trips ~ test$Complains_Price)
+reg6 <- lm(formula = test$business_trips ~ test$Complains_Wifi)
+
+reg7 <- lm(formula = test$couples_stay ~ test$Complains_Breakfast)
+reg8 <- lm(formula = test$couples_stay ~ test$Complains_Price)
+reg9 <- lm(formula = test$couples_stay ~ test$Complains_Wifi)
+
+
+reg10 <- lm(formula = test$family_with_younger_stays ~ test$Complains_Breakfast)
+reg11 <- lm(formula = test$family_with_younger_stays ~ test$Complains_Price)
+reg12 <- lm(formula = test$family_with_younger_stays ~ test$Complains_Wifi)
+```
+##
+Watching all the lm and determine which can be used with min RMSE
+##
+```{r}
+#watching the accuracy of the lm
+summary(reg1)
+summary(reg2)
+summary(reg3)
+summary(reg4)
+summary(reg5)
+summary(reg6)
+summary(reg7)
+summary(reg8)
+summary(reg9)
+summary(reg10)
+summary(reg11)
+summary(reg12)
+```
