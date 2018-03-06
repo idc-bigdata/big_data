@@ -1,0 +1,677 @@
+---
+title: "Wine"
+author: "Rotem Zaarour & Dor Heldshtein & Lior Rosen"
+date: "January 2018"
+output:
+  html_notebook: default
+  word_document: default
+  pdf_document: default
+  html_document: default
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### 1. Reading The data, EDA and data preparation
+
+**Reading, and understanding the DATA: **
+
+>Data source:
+   https://www.kaggle.com/zynicide/wine-reviews/data
+
+```{r}
+df <- read.csv('C:/Users/Meni/Downloads/winemag-data-130k-v2.csv') # Change this path to your downloaded file
+```
+
+Exemaining n/a:
+```{r Exemaining n/a:}
+# checking for missing data and cleaning the n/a
+print(colSums(is.na(df)))
+# as we see we have some n/a in the price so we sould clean it:
+df <- df[!is.na(df$price), ]
+df <- df[(df$country!= ""), ]
+#df <- df[(df$price != ""), ]
+```
+
+Quick glance at the data:
+```{r Quick glance at the data:}
+str(df)
+a.df = c("country","province", "region_1", "region_2", "points", "price", "designation", "variety", "winery", "taster_name")
+summary(df[,a.df])
+```
+
+Summary of unique values:
+```{r}
+unique_vals <- sapply(df, unique)
+summary(unique_vals)
+```
+
+**Exploring the DATA**
+
+Defining wine types by red and white
+```{r}
+# the following chunk requires installation of the package dplyr
+library(dplyr)
+
+df$wine_type = ifelse(df$variety == "Chardonnay" | df$variety == "Riesling" | df$variety == "Sauvignon Blanc" | df$variety == "White Blend" | df$variety == "Sparkling Blend" | df$variety == "Pinot Gris" | df$variety == "Champagne Blend" | df$variety == "Grüner Veltliner" | df$variety == "Pinot Grigio" | df$variety == "Portuguese White" | df$variety == "Viognier" | df$variety == "Gewürztraminer" | df$variety == "Gewürztraminer", 
+                              "White Wine",
+                              "Red Wine")
+df$wine_type = as.factor(df$wine_type)  
+summary(df$wine_type)
+```
+
+adding each country the mean of its score points and price:
+```{r}
+mean_pricePcntry = aggregate(price~country, data=df, mean)
+mean_pointsPcntry = aggregate(points~country, data=df, mean)
+
+enrich_means = merge(mean_pointsPcntry, mean_pricePcntry, by = "country")
+colnames(enrich_means) = c("country", "m.pntPcntry", "m.prcPcntry")
+df = merge(df, enrich_means, by = "country")
+
+```
+
+adding external data ??
+
+**Lets inspect the DATA: **
+
+First we would like to analyze the distribution:
+
+* the points (score) given in each wine criticism.
+* the price (only under 150 to reduce the edges).
+* the price's log.
+
+```{r}
+# the following chunk requires the installation of the package ggplot
+
+library(ggplot2)
+library(ggjoy)
+library(gridExtra)
+library(ggridges)
+
+ggplot(data = df, aes(x= points, colour = I('black'), fill = I('#099DD9')))+geom_histogram(binwidth = 1)+labs(x = "Points", y= "Frequency", title = "Wine Review - Points histogram")
+summary(df$points)
+
+ggplot(data = df[(df$price<150),], aes(x= price, colour = I('black'), fill = I('#099DD9')))+geom_histogram()+labs(x = "Price", y= "Frequency", title = "Wine Reviews - Price Histrogram")
+summary(df$price)
+ggplot(data = df, aes(x= log(price), colour = I('black'), fill = I('#099DD9')))+geom_histogram()+labs(x = "log(Price)", y= "Frequency", title = "Wine Reviews - Log(prices) Histogram")
+summary(log(df$price))
+
+desc = data.frame(nw = (lengths(gregexpr(" ", df$description))+1))
+ggplot(data = desc, aes(x= nw, colour = I('black'), fill = I('#099DD9')))+geom_histogram()+labs(x = "Words", y= "Frequency", title = "Wine Reviews - Description words amount Histogram")
+summary(desc$nw)
+```
+
+Now we would like to take a closer look at the differences between white and red wines, among the top 20 wine varieties in the data:
+
+Top 20 types of wine
+```{r}
+top_20_wines <- df %>%
+  group_by(variety) %>%
+  summarise(count = n())%>%
+  arrange(desc(count))
+
+top_20_wines <- top_20_wines[1:20,1:2]
+
+top_20_wines
+top_20_wines <- top_20_wines$variety  
+top_20.df <- subset(df, variety %in% top_20_wines)
+```
+
+Now let's explore how price and rating are distributed within white and red wines
+```{r}
+top_20.df[(top_20.df$price <= 100 & top_20.df$price >0),] %>%
+  group_by(variety, wine_type) %>%
+  summarise(n=n(),
+            avg_score = mean(points),
+            avg_price = mean(price)) %>%
+  ggplot(aes(x=avg_price, y= avg_score, size = n, colour = wine_type))+
+  geom_point()+
+  scale_color_manual(values = c("#990000", "#FFFF66"))
+
+```
+
+
+Let's take a deeper look into specific wine varieties among the white and red groups, and see what we can learn from analyzing their price and rating (points)
+```{r}
+p1 <- ggplot(data = subset(top_20.df, wine_type == "Red Wine"), aes(x=points, y=variety))+
+  geom_density_ridges2(bandwidth = 0.539, fill = "#990000")
+
+p2 <- ggplot(data = subset(top_20.df, wine_type == "White Wine"), aes(x=points, y=variety))+
+  geom_density_ridges2(bandwidth = 0.539, fill = "#FFFF66")
+
+grid.arrange(p1, p2, nrow = 1)
+```
+We will look at the log of price, in view of its broad distribution, as we saw earlier in the histogram
+```{r}
+p3 <- ggplot(data = subset(top_20.df, wine_type == "Red Wine"), aes(x=log(price), y=variety))+
+  geom_joy2(bandwidth = 0.103, fill = "#990000")
+
+p4 <- ggplot(data = subset(top_20.df, wine_type == "White Wine"), aes(x=log(price), y=variety))+
+  geom_joy2(bandwidth = 0.103, fill = "#FFFF66")
+
+grid.arrange(p3, p4, nrow=1)
+```
+Exploring the relation between price and points for white and red wines
+```{r}
+# the following requires installation of gridExtra package
+p5 <- ggplot(data = subset(top_20.df, wine_type == "Red Wine"), aes(x=points, y= price))+
+  geom_point(colour="#990000")+
+  scale_y_log10()+
+  geom_smooth()
+
+p6 <- ggplot(data = subset(top_20.df, wine_type == "White Wine"), aes(x=points, y= price))+
+  geom_point(colour="#FFFF66")+
+  scale_y_log10()+
+  geom_smooth()
+
+
+cor(log(top_20.df$price), top_20.df$points)
+
+grid.arrange(p5, p6, nrow=1)
+```
+
+### 2. Analyzing the data - exploring regressions
+
+**filter and split to train and test, as learned before:**
+
+```{r}
+set.seed(7) # Split to train 80% and test 20%
+bound <- floor((nrow(df)/5)*4)
+d <- df[sample(nrow(df)), ]
+df.train <- d[1:bound, ]
+df.test <- d[(bound+1):nrow(df), ]
+```
+
+**prepearing the DATA:**
+
+```{r prepering the train DATA:}
+clean_train = data.frame(points = df.train$points,
+                         price = df.train$price,
+                         desc_nw = (lengths(gregexpr(" ", df.train$description))+1),
+                         DnwPpoint = log(lengths(gregexpr(" ", df.train$description))*1)+df.train$points,
+                     title_nc = nchar(as.character(df.train$title)),
+                     cntry_code = as.numeric(df.train$country),
+                     isred = ifelse(df.train$wine_type == "White Wine", 0, 1)
+                     )
+summary(clean_train)
+```
+
+###Cheking for correlations:
+
+```{r}
+cor(clean_train[clean_train$isred == 0,], clean_train[clean_train$isred == 0,])
+```
+
+
+now let's take a closer look at pairs
+
+```{r}
+pairs(clean_train[c(2,1,3,4)], col = "blue", cex = 0.5, upper.panel = NULL)
+```
+
+**checking the test data:**
+
+```{r prepering the test DATA:}
+clean_test = data.frame(points = df.test$points,
+                         price = df.test$price,
+                         desc_nw = (lengths(gregexpr(" ", df.test$description))+1),
+                         DnwPpoint = log(lengths(gregexpr(" ", df.test$description))*1)+df.test$points,
+                     title_nc = nchar(as.character(df.test$title)),
+                     cntry_code = as.numeric(df.test$country),
+                     isred = ifelse(df.test$wine_type == "White Wine", 0, 1)
+                     )
+summary(clean_test)
+```
+
+###Cheking the correlations of the test data:
+
+```{r}
+cor(clean_test, clean_test)
+```
+
+
+and also the test data pairs as we did for the train data
+
+```{r}
+pairs(clean_test[c(2,1,3,4)], col = "blue", cex = 0.5, upper.panel = NULL)
+```
+
+Now let's explore possible regression models for predicting the price of a wine
+```{r}
+# Regression Models
+# Linear Regression
+
+Price_points_reg1 <- lm(log(price) ~ points, data = df.train)
+summary(Price_points_reg1)
+
+par(mfrow = c(2,2))
+plot(Price_points_reg1)
+
+Price_points_reg2 <- lm(log(price) ~ points + wine_type, data = df.train)
+summary(Price_points_reg2)
+
+par(mfrow = c(2,2))
+plot(Price_points_reg2)
+
+
+Price_points_reg3 <- lm(log(price) ~ points^2 + points + wine_type, data = df.train)
+summary(Price_points_reg3)
+
+par(mfrow = c(2,2))
+plot(Price_points_reg3)
+
+Price_points_reg4 <- lm(log(price) ~ points + desc_nw, data = clean_train)
+summary(Price_points_reg4)
+
+par(mfrow = c(2,2))
+plot(Price_points_reg4)
+```
+
+Now let's explore additional regression models for predicting the ratio between wine's rating and price
+```{r}
+# Regression Models
+# Linear Regression
+
+lior_df = clean_train
+#lior_df$ratio = log(lior_df$price) / (lior_df$points + 1) 
+lior_df$ratio = (lior_df$points + 1) / log(lior_df$price) 
+
+Price_points_reg5 <- lm(ratio ~ desc_nw, data = lior_df)
+summary(Price_points_reg5)
+
+par(mfrow = c(2,2))
+plot(Price_points_reg5)
+
+Price_points_reg6 <- lm(ratio ~ cntry_code + desc_nw, data = lior_df)
+summary(Price_points_reg6)
+
+par(mfrow = c(2,2))
+plot(Price_points_reg6)
+```
+
+
+Now let's check the validity of the regression models on the test data as well
+```{r}
+# Applying the Regression Model on the Test Data
+
+# Regression Models - Linear Regression
+
+Price_points_reg1_test <- lm(log(price) ~ points, data = df.test)
+summary(Price_points_reg1_test)
+
+par(mfrow = c(2,2))
+plot(Price_points_reg1_test)
+
+Price_points_reg2_test <- lm(log(price) ~ points + wine_type, data = df.test)
+summary(Price_points_reg2_test)
+
+par(mfrow = c(2,2))
+plot(Price_points_reg2_test)
+
+
+Price_points_reg3_test <- lm(log(price) ~ points^2 + points + wine_type, data = df.test)
+summary(Price_points_reg3_test)
+
+par(mfrow = c(2,2))
+plot(Price_points_reg3_test)
+
+Price_points_reg4_test <- lm(log(price) ~ points + desc_nw, data = clean_test)
+summary(Price_points_reg4_test)
+
+par(mfrow = c(2,2))
+plot(Price_points_reg4_test)
+
+lior_df_test = clean_test
+lior_df_test$ratio = log(lior_df_test$price) / (lior_df_test$points + 1) 
+
+Price_points_reg5_test <- lm(ratio ~ desc_nw, data = lior_df_test)
+summary(Price_points_reg5_test)
+
+par(mfrow = c(2,2))
+plot(Price_points_reg5_test)
+
+Price_points_reg6_test <- lm(ratio ~ desc_nw^2 + desc_nw, data = lior_df_test)
+summary(Price_points_reg6_test)
+
+par(mfrow = c(2,2))
+plot(Price_points_reg6_test)
+```
+
+### 3. Analyzing the Wine Reviews Text
+
+Textual Mining of the wine reviews
+```{r}
+# Textual analysis of the wine reviews
+
+# Analyzing how many words are there in each review
+df.train$wordcount <- sapply(gregexpr("\\S+", df.train$description), length)
+
+summary(df.train$wordcount)
+
+library("ggplot2")
+library("ngram")
+library("ggridges")
+ggplot(data = df.train, aes(x= wordcount))+geom_histogram(binwidth = 3)+labs(x = "Number of Words", y= "Frequency", title = "Nomber of words in Wine reviews") 
+
+ggplot(data = df.train, aes(x= wordcount, y= wine_type, fill = wine_type))+
+  geom_density_ridges()+ labs(x = "Word Count", title = "Distribution of word count of description")+
+  scale_fill_cyclical(values = c("#CC3300", "#FFCC00"))
+
+ggplot(data = df.train, aes(x=variety, y=wordcount))+
+  geom_boxplot()+
+  coord_flip()+
+  labs(title = "Wordcount Distribution by Variety", x= "Variety", y= "Word Count")
+```
+
+Let's take as an example the Red Blend Wines - and perform Text Mining on their reviews
+  
+```{r}
+library("tm")
+library("SnowballC")
+library("wordcloud")
+library("RColorBrewer")
+
+
+#---------- Red Wines Word cloud ----------#
+
+
+#pinot <- subset(df.test, wine_type == "Red Wine")
+pinot <- subset(df.test, variety == "Red Blend")
+
+descriptors <- Corpus(VectorSource(pinot$description))
+head(descriptors)
+
+# Convert the text to lower case
+descriptors <- tm_map(descriptors, content_transformer(tolower))
+# Remove numbers
+descriptors <- tm_map(descriptors, removeNumbers)
+# Remove english common stopwords
+descriptors <- tm_map(descriptors, removeWords, stopwords("english"))
+# Remove your own stop word
+# specify your stopwords as a character vector
+descriptors <- tm_map(descriptors, removeWords, c("wine", "pinot", "noir", "drink", "flavors")) 
+# Remove punctuations
+descriptors <- tm_map(descriptors, removePunctuation)
+# Eliminate extra white spaces
+descriptors <- tm_map(descriptors, stripWhitespace)
+# Text stemming
+#descriptors <- tm_map(descriptors, stemDocument)
+
+# Build a term-document matrix
+dtm <- TermDocumentMatrix(descriptors)
+dtm_mat <- as.matrix(dtm)
+v <- sort(rowSums(dtm_mat),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+head(d, 20)
+# Generate the Word cloud
+set.seed(1234)
+wordcloud(words = d$word, freq = d$freq, min.freq = 1,
+          max.words=20, random.order=FALSE, rot.per=0.35, 
+          colors=brewer.pal(8, "Dark2"))
+
+```
+
+Applying NLP Methods for Text Mining and Clustering
+```{r}
+# Text Mining and clustering
+library(tm)
+library(proxy)
+library(RTextTools)
+library(fpc)   
+library(wordcloud)
+library(cluster)
+library(stringi)
+```
+```{r}
+corpus = Corpus(VectorSource(pinot$description))
+# summary(corpus)
+
+ndocs <- length(corpus)
+# ignore extremely rare words i.e. terms that appear in less then 1% of the descriptions
+minTermFreq <- ndocs * 0.01
+# ignore overly common words i.e. terms that appear in more than 50% of the descriptions
+maxTermFreq <- ndocs * .5
+dtm = DocumentTermMatrix(corpus,
+                         control = list(
+                                        stopwords = TRUE, 
+                                        wordLengths=c(4, 15),
+                                        removePunctuation = T,
+                                        removeNumbers = T,
+                                        stemming = T,
+                                        bounds = list(global = c(minTermFreq, maxTermFreq))
+                                       ))
+#dtm <- dtm[, names(head(sort(colSums(as.matrix(dtm))), 400))]
+#dtm <- dtm[, names(sort(colSums(as.matrix(dtm))))]
+#print(as.matrix(dtm))
+write.csv((as.matrix(dtm)), "test.csv")
+#head(sort(as.matrix(dtm)[18,], decreasing = TRUE), n=15)
+dtm.matrix = as.matrix(dtm)
+#wordcloud(colnames(dtm.matrix), dtm.matrix[28, ], max.words = 20)
+inspect(dtm)
+```
+```{r}
+dtm <- weightTfIdf
+
+# dtm.matrix = as.matrix(dtm)
+
+wordcloud(colnames(dtm.matrix), dtm.matrix[100, ], max.words = 10)
+# inspect(dtm)
+
+#write.csv((as.matrix(dtm)), "test.csv")
+
+#head(sort(as.matrix(dtm)[1,], decreasing = TRUE), n=15)
+wordcloud(colnames(dtm.matrix), dtm.matrix[12,], max.words = 10)
+```
+
+
+Trying to explore possible clustering using K-Means
+```{r}
+# Clustering - K Means - Price Vs. Points
+pairs(clean_train[1:5], col = "blue", cex = 0.5, upper.panel = NULL)
+df2 <- data.frame(x=clean_train$price, y=clean_train$points) 
+plot(df2$x, df2$y, cex = 0.5)
+#df2 <- data.frame(x=scale(clean_train$price), y=scale(clean_train$points) )
+km <- kmeans(df2, centers = 5)
+plot(df2$x, df2$y, cex = 0.5, col=km$cluster)
+```
+
+```{r}
+# Clustering - K Means - Price Vs. Number of Words in the Description
+df3 <- data.frame(x=clean_train$price, y=clean_train$desc_nw) 
+plot(df2$x, df2$y, cex = 0.5)
+#df2 <- data.frame(x=scale(clean_train$price), y=scale(clean_train$points) )
+km <- kmeans(df3, centers = 4, nstart = 20)
+plot(df3$x, df3$y, cex = 0.5, col=km$cluster, xlab="log(price)", ylab="number of words")
+
+```
+
+### 4. Data Encrichment - Adding Wine Chemistry Vs, Quality Dataset
+
+Data Encrichment - Adding wine chemistry dataset
+```{r}
+# Enriching the data - Wine Quality according to Chemistry 
+
+# reading the dataset
+reds <- read.csv("C:/Users/Meni/Downloads/Wine_data_Red.csv")
+reds$quality_as_factor <- factor(reds$quality, levels=c(0,1,2,3,4,5,6,7,8,9,10))
+# reorganizing 
+reds_quality_min <- min(reds$quality)
+reds_quality_max <- max(reds$quality)
+reds_quality_mean <- mean(reds$quality)
+reds_quality_median <- median(reds$quality)
+reds_quality_iqr <- IQR(reds$quality)
+reds_quality_q1 <- reds_quality_median - reds_quality_iqr
+reds_quality_q3 <- reds_quality_median + reds_quality_iqr
+
+reds_quality_mode <- names(which.max(table(reds$quality)))
+# cleaning outliers
+reds_outliers <- sum(reds$quality < reds_quality_q1 - 1.5*reds_quality_iqr)
+reds_outliers <- reds_outliers + sum(reds$quality > reds_quality_q3 + 1.5*reds_quality_iqr)
+
+reds_quality_sd <- sd(reds$quality)
+
+# EDA 
+ggplot(data=reds, aes(x=quality)) +
+    geom_bar(binwidth=1, color='black', fill='white') +
+    coord_cartesian(xlim=c(0,10)) +
+    geom_vline(xintercept = reds_quality_median, linetype='longdash', alpha=.5) +
+    geom_vline(xintercept = reds_quality_q1 - 1.5*reds_quality_iqr, linetype='longdash', alpha=.5) +
+    geom_vline(xintercept = reds_quality_q3 + 1.5*reds_quality_iqr, linetype='longdash', alpha=.5) +
+    geom_vline(xintercept = reds_quality_mean, linetype=1, color='blue', alpha=.5) +
+    xlab("Wine Quality") +
+    ylab("Number of Samples")
+# searching for correlations
+cor(x=reds[,2:12], y=reds$quality)
+
+summary(reds$alcohol)
+
+reds_alcohol_mean <- mean(reds$alcohol)
+reds_alcohol_median <- median(reds$alcohol)
+
+tapply(reds$alcohol, reds$quality, mean)
+# plotting the alcohol percentage vs. quality
+ggplot(data=reds, aes(x=quality_as_factor, y=alcohol)) +
+    geom_boxplot() +
+    geom_hline(show_guide=T, yintercept=reds_alcohol_mean, linetype='longdash', alpha=.5, color='blue') +
+    geom_vline(xintercept = reds_quality_mean-reds_quality_min+1, linetype='longdash', color='blue', alpha=.5) +
+    xlab("Wine Quality") +
+    ylab("Alcohol")
+
+ggplot(data=reds, aes(x=as.numeric(quality), y=alcohol)) +
+    geom_jitter(alpha=1/3) +
+    geom_smooth(method='lm', aes(group = 1))+
+    geom_hline(yintercept=reds_alcohol_mean, linetype='longdash', alpha=.5, color='blue') +
+    geom_vline(xintercept = reds_quality_mean, linetype='longdash', color='blue', alpha=.5) +
+    xlab("Wine Quality") +
+    ylab("Alcohol")
+
+summary(reds$citric.acid)
+# exploring citric acid 
+reds_citric.acid_mean <- mean(reds$citric.acid)
+reds_citric.acid_median <- median(reds$citric.acid)
+reds_citric.acid_sd <- sd(reds$citric.acid)
+reds_citric.acid_max <- max(reds$citric.acid)
+caout <- (reds_citric.acid_max - reds_citric.acid_mean) / reds_citric.acid_sd
+
+tapply(reds$citric.acid, reds$quality, mean)
+# plotting the citric acid percentage vs. quality
+ggplot(data=reds, aes(x=quality_as_factor, y=citric.acid)) +
+    geom_boxplot() +
+    geom_hline(show_guide=T, yintercept=reds_citric.acid_mean, linetype='longdash', alpha=.5, color='blue') +
+    geom_vline(xintercept = reds_quality_mean-reds_quality_min+1, linetype='longdash', color='blue', alpha=.5) +
+    xlab("Wine Quality") +
+    ylab("Citric Acid")
+
+ggplot(data=reds, aes(x=as.numeric(quality), y=citric.acid)) +
+    geom_jitter(alpha=1/3) +
+    geom_smooth(method='lm', aes(group = 1))+
+    geom_hline(yintercept=reds_citric.acid_mean, linetype='longdash', alpha=.5, color='blue') +
+    geom_vline(xintercept = reds_quality_mean, linetype='longdash', color='blue', alpha=.5) +
+    xlab("Wine Quality") +
+    ylab("Citric Acid")
+
+summary(reds$volatile.acidity)
+# exploring the volatile acidity
+reds_volatile.acidity_mean <- mean(reds$volatile.acidity)
+reds_volatile.acidity_median <- median(reds$volatile.acidity)
+reds_volatile.acidity_sd <- sd(reds$volatile.acidity)
+reds_volatile.acidity_max <- max(reds$volatile.acidity)
+vaout <- (reds_volatile.acidity_max - reds_volatile.acidity_mean) / reds_volatile.acidity_sd
+
+tapply(reds$volatile.acidity, reds$quality, mean)
+# plotting the volatile acidity vs. quality
+ggplot(data=reds, aes(x=quality_as_factor, y=volatile.acidity)) +
+    geom_boxplot() +
+    geom_hline(show_guide=T, yintercept=reds_volatile.acidity_mean, linetype='longdash', alpha=.5, color='blue') +
+    geom_vline(xintercept = reds_quality_mean-reds_quality_min+1, linetype='longdash', color='blue', alpha=.5) +
+    xlab("Wine Quality") +
+    ylab("Volatile Acidity")
+
+ggplot(data=reds, aes(x=as.numeric(quality), y=volatile.acidity)) +
+    geom_jitter(alpha=1/3) +
+    geom_smooth(method='lm', aes(group = 1))+
+    geom_hline(yintercept=reds_volatile.acidity_mean, linetype='longdash', alpha=.5, color='blue') +
+    geom_vline(xintercept = reds_quality_mean, linetype='longdash', color='blue', alpha=.5) +
+    xlab("Wine Quality") +
+    ylab("Volatile Acidity")
+
+reds <- transform(reds, is.faulty = quality<5)
+# defining wines which are considered low level, or faulty
+faulty.reds <- table(reds$is.faulty)
+
+ggplot(data=reds, aes(x=is.faulty, y=volatile.acidity)) +
+    geom_boxplot() +
+    geom_hline(show_guide=T, yintercept=reds_volatile.acidity_mean, linetype='longdash', alpha=.5, color='blue') +
+    geom_vline(xintercept = reds_quality_mean-reds_quality_min+1, linetype='longdash', color='blue', alpha=.5) +
+    xlab("Faulty Wine") +
+    ylab("Volatile Acidity")
+
+summary(subset(reds, is.faulty)$volatile.acidity)
+# plotting faluty wines vs. alcohol percentage
+ggplot(data=reds, aes(x=is.faulty, y=alcohol)) +
+    geom_boxplot() +
+    geom_hline(show_guide=T, yintercept=reds_alcohol_mean, linetype='longdash', alpha=.5, color='blue') +
+    geom_vline(xintercept = reds_quality_mean-reds_quality_min+1, linetype='longdash', color='blue', alpha=.5) +
+    xlab("Faulty Wine") +
+    ylab("Alcohol")
+
+summary(subset(reds, is.faulty)$alcohol)
+# plotting faluty wines vs. citric acid
+ggplot(data=reds, aes(x=is.faulty, y=citric.acid)) +
+    geom_boxplot() +
+    geom_hline(show_guide=T, yintercept=reds_citric.acid_mean, linetype='longdash', alpha=.5, color='blue') +
+    geom_vline(xintercept = reds_quality_mean-reds_quality_min+1, linetype='longdash', color='blue', alpha=.5) +
+    xlab("Faulty Wine") +
+    ylab("Citric Acid")
+
+summary(subset(reds, is.faulty)$citric.acid)
+
+cor(x=reds$volatile.acidity, y=reds$citric.acid)
+
+library(ggplot2)
+ggplot(data=reds, aes(x=quality)) +
+    geom_bar(binwidth=1, color='black', fill='white') +
+    coord_cartesian(xlim=c(0,10)) +
+    geom_vline(xintercept = reds_quality_median, linetype='longdash', alpha=.5) +
+    geom_vline(xintercept = reds_quality_q1 - 1.5*reds_quality_iqr, linetype='longdash', alpha=.5) +
+    geom_vline(xintercept = reds_quality_q3 + 1.5*reds_quality_iqr, linetype='longdash', alpha=.5) +
+    geom_vline(xintercept = reds_quality_mean, linetype=1, color='blue', alpha=.5) +
+    xlab("Wine Quality") +
+    ylab("# Samples")
+
+reds$quality.cut <- cut(reds$quality, breaks=c(0,4,6,10))
+ggplot(data=reds, aes(x=alcohol, y=citric.acid)) +
+    coord_cartesian(
+        xlim=c(quantile(reds$alcohol,.01),quantile(reds$alcohol,.99)),
+        ylim=c(quantile(reds$citric.acid,.01),quantile(reds$citric.acid,.99))
+        ) +
+    geom_jitter(alpha=.5, aes(size=quality.cut, color=quality.cut)) +
+    geom_vline(xintercept = reds_alcohol_mean, linetype='longdash', color='blue', alpha=.5) +
+    geom_hline(yintercept = reds_citric.acid_mean, linetype='longdash', color='blue', alpha=.5) +
+    xlab("Alcohol") +
+    ylab("Citric Acid")
+
+reds <- transform(
+        reds,
+        quadrant = ifelse(alcohol>reds_alcohol_mean,
+                          ifelse(citric.acid>reds_citric.acid_mean,4,2),
+                          ifelse(citric.acid>reds_citric.acid_mean,3,1))
+    )
+
+table(reds$quadrant)
+
+sort(tapply(reds$is.faulty, reds$quadrant, mean))
+
+sort(tapply(reds$volatile.acidity>reds_volatile.acidity_mean, reds$quadrant, mean))
+
+cor(x=reds$volatile.acidity, y=reds$citric.acid)
+
+
+
+```
+
+

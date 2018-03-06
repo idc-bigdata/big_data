@@ -1,0 +1,321 @@
+---
+title: "WinePCA- Final"
+author: "Lior Rosen"
+date: "February 13, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+#initialize all necessary packages
+options(warn=-1)
+
+suppressMessages(library(dplyr))
+suppressMessages(library(slam))
+suppressMessages(library(lsa))
+suppressMessages(library(tm))
+suppressMessages(library(NLP))
+suppressMessages(library(mlr))
+suppressMessages(library(ggplot2))
+suppressMessages(library(gmodels))
+suppressMessages(library(reshape2))
+
+```{r setup, include=FALSE}
+
+# Scraping wine reviews directly from the Wine Enthusiast website.
+library(dplyr)
+library(rvest)
+# site = specific webpage following specific search definition of interest, can be changed on demand as needed
+site = read_html("https://www.winemag.com/?s=&drink_type=wine&wine_type=Red,White&vintage=2016,2015,2014,2013,2012,2011,2010,2009,2008&page=1")
+nr_pages <- html_nodes(site,".pagination li a") %>%
+  html_text() %>% tail(.,1) %>% as.numeric
+
+wine_href <- html_nodes(site,".review-listing") %>% html_attr("href")
+
+info_xtr <- function(x){
+  page <- read_html(x)
+  review <- page %>% html_nodes("p.description") %>% 
+    html_text
+  review_info <- page %>% html_nodes(".info.small-9.columns span span") %>% 
+    html_text()
+  cbind(review, date = review_info[5], Alc = review_info[1])
+}
+
+```
+
+```{r}
+# Start the scraper ==============
+Wine_cellar <- list()
+for(i in 1:nr_pages)
+{
+  
+  cat("Wine review, page: ", i,"\n")
+# extracting South African wine reviews  
+  site = read_html(paste0("http://www.winemag.com/?s=stellenbosch&drink_type=wine&page=",i))
+  
+  wine <- html_nodes(site,".review-listing .title") %>%
+    html_text()
+  
+  # extract specific information from title
+  wine_farms <- gsub(" \\d.*$","",wine)
+  wine_year <- gsub("[^0-9]","",wine)
+  wine_name <- gsub("^.*\\d ","",wine) %>% gsub(" \\(Stellenbosch\\)","",.)
+#  wine_name <- gsub("^.*\\d ","",wine)
+  # extract review points
+  points <- html_nodes(site,".info .rating") %>%
+    html_text() %>% gsub(" Points","",.)
+  
+  # extract review price
+  price <- html_nodes(site,"span.price") %>%
+    html_text()
+  
+  wine_href <- html_nodes(site,".review-listing") %>% html_attr("href")
+  
+  # collect all the information from each of the wines seperately
+  reviews <- sapply(wine_href, function(x) info_xtr(x))
+  reviews <- t(reviews) 
+  row.names(reviews) <- NULL
+  colnames(reviews) <- c("review", "review_date", "Alc")
+  
+  # bind all the information into a new format of data.frame()
+  Wine_cellar[[i]] <- data.frame(wine_farms, wine_year, wine_name, points, price, wine_href, reviews, stringsAsFactors = F)
+  
+  # save the already collected data, in case the scraper stops from some reason
+  saveRDS(Wine_cellar,"Wine_collection.RDS")
+  
+  # add in a sleep rule in case needed so that to flood the website
+  Sys.sleep(runif(1,0,3))
+}
+
+```
+
+```{r}
+# Definitions from the data being read
+
+library(dplyr)
+library(ggmap)
+wine_terms<-t(read.csv("wine_terms.txt", sep = ",", header = F))
+
+# loading the wine review data, scraped from the web
+
+#wine_cellar <- readRDS("wine_collection.RDS")
+#wine_cellar <- readRDS("Wine_collection_2008RED_US.RDS")"
+#wine_all <- bind_rows(wine_cellar)
+
+Wine_cellar <- Wine_cellar[1:39]
+#wine_cellar <- wine_cellar[1:230]
+Wine_all <- bind_rows(Wine_cellar)
+Wine_all %>% select(-c(wine_href, review)) %>% str()
+
+# load all data in local data directory where each segment of reviews is stored in a seperate rds file
+path = "C:/users/Meni/Downloads/WineApp/data/"
+setwd(path)
+
+out.file<-list()
+file.names <- dir(path = getwd(), pattern =".RDS")
+
+for(i in 1:length(file.names)){
+  file <- readRDS(file.names[i])
+  out.file <- c(out.file, file)
+}
+
+wine_all <- bind_rows(out.file)
+```
+
+```{r}
+# let's define a function to clean and match reviews to wine terms
+
+options(warn=-1)
+
+suppressMessages(library(dplyr))
+suppressMessages(library(slam))
+suppressMessages(library(lsa))
+suppressMessages(library(tm))
+suppressMessages(library(NLP))
+suppressMessages(library(ggplot2))
+suppressMessages(library(gmodels))
+suppressMessages(library(reshape2))
+
+wine_terms<-t(read.csv("wine_terms.txt", sep = ",", header = F))
+#wine_cellar <- readRDS("Wine_collection_2008RED_US.RDS")
+wine_cellar <- readRDS("Wine_collection_South_Africa.RDS")
+wine_all <- bind_rows(wine_cellar)
+
+clean_review = function(x,wine_terms){
+  
+  review_terms <- x %>% 
+    toupper() %>% 
+    removePunctuation() %>% 
+    strsplit(" ")
+  
+  review_vector <- matrix(unlist(review_terms), ncol = 1, byrow = TRUE)
+  term_vector <- as.numeric(wine_terms%in%review_vector)
+  return(term_vector)
+  
+}
+
+
+# let's subset to remove infrequent wines and filter out others, if we want
+# (e.g. remove blends, keep just one wine type, etc)
+
+wine_all.new <- wine_all # not to mess up the first file
+# there are many varieties at < 10 reviews -   therefore we will not try and classify them
+wine_all.new <- wine_all.new %>% group_by(Variety) %>% filter(n() >= 80) %>% ungroup() %>% as.data.frame()
+
+wine_all.new <- wine_all.new %>% filter(!grepl("Portuguese",wine_all.new$Variety, fixed=TRUE))
+wine_all.new <- subset(wine_all.new, !(Variety %in% c("Sauvignon")))
+
+# now let's use that function on all wine review by first picking out the reviews
+wine_reviews <- wine_all.new["review"]
+wine_reviews <- split(wine_reviews,seq(nrow(wine_reviews)))
+
+# then by getting the IDs for each wine
+wine_IDs <- wine_all.new["Variety"]
+wine_IDs <- unlist(split(wine_IDs, seq(nrow(wine_IDs))))
+
+# then using the function we made on each review
+term_matrix <- lapply(wine_reviews, function(x) clean_review(x,wine_terms))
+term_matrix <- matrix(unlist(term_matrix), ncol = nrow(wine_all.new), dimnames = list(NULL, wine_IDs))
+
+```
+
+```{r}
+
+options(warn=-1)
+## Now we've got various features/terms that can define wine similarity
+## We will use these to try and define distinct wine varieties 
+
+#which (apply(term_matrix,2,var)==0)
+#term_matrix[ , apply(term_matrix, 2, var) != 0]
+#term_matrix[,sapply(df, function(v) var(v, na.rm=TRUE)!=0)]
+
+## to simplify,let's do PCA on that term matrix
+
+pc_results <- prcomp(t(term_matrix), scale = FALSE)
+#pc_results <- prcomp(t(term_matrix), scale=TRUE, center = TRUE, retx=TRUE)
+
+## and bind wine features to the PCS for easy sorting 
+pcs <- cbind(pc_results$x,wine_all.new)
+
+## now let's create a plot on the basis of wine types -- 
+#for example, red vs white vs rose - in case all of these are included in the specific data
+library(RColorBrewer)
+
+plt1 <- ggplot(subset(pcs,Variety %in% c("White Blend","Rosé", "Red Blend")), 
+             aes(x = PC1, y = PC2, colour = Variety)) + geom_point( alpha = 1/1.5) + xlim(-6, 9) + ylim(-7, 8) + 
+guides(col = guide_legend(nrow = 2))+theme_minimal() + theme(legend.position = "bottom") +    
+  scale_color_manual(name = 'Wines:', breaks = c('Red Blend',  'Rosé','White Blend'), values=c("#e83544", "#FFB6C1","#dfca4e")) 
+```
+
+```{r}
+# the following chunk takes a closer look at the more popular wine varieties
+plt2 <- ggplot(subset(pcs,Variety %in% c("Chardonnay",  "Sauvignon Blanc", "Syrah","Cabernet Sauvignon","Sangiovese")), 
+             aes(x = PC1, y = PC2, colour = Variety)) + 
+  guides(col = guide_legend(nrow = 2))+theme_minimal() + theme(legend.position = "bottom") + geom_point( alpha = 1/1.5)  +xlim(-6, 9) + ylim(-7, 8)+
+  scale_color_manual(name = 'Wines:', breaks = c('Chardonnay','Cabernet Sauvignon','Sangiovese','Sauvignon Blanc','Syrah'), values=c("#651659", "#E69F00",  "#762020","#fffcc0","#ff3b3f")) 
+
+# plotting histograms 
+hist1<-ggplot(subset(pcs,Variety %in% c("White Blend","Rosé", "Red Blend")), 
+             aes(x = PC1, fill = Variety))+theme_minimal()+geom_density(binwidth=0.1,alpha = .8)+theme(legend.position="none")+ xlim(-6, 9)+
+              scale_fill_manual(name = 'Wines:', breaks = c('Red Blend',  'Rosé','White Blend'), values=c("#e83544", "#FFB6C1","#dfca4e")) 
+
+hist2<-ggplot(subset(pcs,Variety %in% c("Cabernet Sauvignon","Chardonnay",  "Sauvignon Blanc", "Syrah","Sangiovese")), 
+             aes(x = PC1, fill = Variety))+theme_minimal()+geom_density(binwidth=0.1,alpha = .8)+theme(legend.position="none")+ xlim(-6, 9)+
+            scale_fill_manual(name = 'Wines:', breaks = c('Chardonnay','Cabernet Sauvignon','Sangiovese','Sauvignon Blanc','Syrah'), values=c("#651659", "#E69F00",  "#762020","#fffcc0","#ff3b3f")) 
+
+```
+
+```{r}
+# plotting PC1 vs. PC2
+source("multiplot.r") #it's googleable, also in the gitRepo
+multiplot(cols = 2, plt1,hist1,plt2,hist2)
+
+```
+
+```{r}
+
+suppressMessages(library(ggrepel))
+
+# now, let's create a plot in which each wine variety is being positioned in a 2-D plane of principal components
+# from that, we will be able to observe possible clusters of wine varieties
+
+pcs2 <- subset(pcs, Category  %in% c("Red", "White"))
+
+samplesize = 50 # don't take wines with fewer than 200 reviews
+pcs2 <- pcs2 %>% group_by(Variety, Category) %>% filter(n() >= samplesize) %>% ungroup() %>% as.data.frame()# note that this pc_wineload =/= the aggregated data for the shiny app
+# that also aggregates by group
+# though the results are similar, aside from the extra varieties (and blurring some of the categories)
+# fwiw this makes classification a *slightly* harder than it should otherwise be 
+pc_wineload = aggregate(pcs2[1:2], by= list(pcs2$Variety, pcs2$Category), FUN = mean)
+ggplot(pc_wineload, aes(x = PC1, y = PC2, label= Group.1, color=Group.2))+ geom_point()+
+
+ scale_color_manual(name = 'Wines:', breaks = c('Red', 'White'), values=c("#e83544", "#E69F00")) +
+      geom_text_repel(label.size =NA, fontface = "bold", size = 3, 
+                       # Add extra padding around each text label.
+                       box.padding = unit(.2, 'lines'),
+                       # Add extra padding around each data point.
+                       point.padding = unit(.2, 'lines'),
+                       # Color of the line segments.
+                       segment.color = '#100000',
+                       # Width of the line segments.
+                       segment.size = 0,
+                       # Draw an arrow from the label to the data point.
+                       arrow = arrow(length = unit(0.01, 'npc')),
+                       # Strength of the repulsion force.
+                       force = 0.2,
+                       # Maximum iterations of the naive repulsion algorithm O(n^2).
+                       max.iter = 3e4
+                       ) + theme(legend.justification=c(0.9,0.1))+theme_minimal()+guides(color=FALSE)#)
+
+```
+
+```{r}
+# add the stem words/terms from the pca
+textplt1 <- ggplot(as.data.frame(pc_results$rotation), aes(x=PC1, y=PC2, label = wine_terms, color = PC1)) +
+  geom_text(check_overlap=TRUE,fontface = "bold", size = 4)+theme_minimal()+
+  scale_color_gradient2(low="#dfca4e", mid = "grey", high = "red", midpoint =0)+
+  guides(color = FALSE)
+
+plot(textplt1)
+```
+
+
+
+
+```{r}
+## now, it is interesting to search how many dimensions are required to reach effective classification
+## or, in other words - what's the dimensionality of wine taste ?
+## we know that many of the descriptive words are used for more than one wine variety
+## we have more than 200 potential terms to describe wines by, so how many actually contribute 
+## to successfully telling the difference amongst wines by category or variety? 
+
+# we will look at the variance explained by the cummulative pca's
+ydata = data.frame(matrix(ncol = 1, nrow = length(pc_results$sdev)))
+ydata[1] <- 100*(pc_results$sdev^2)/sum((pc_results$sdev^2))
+ydata <- as.data.frame(tibble::rownames_to_column(ydata,"PC #"))
+ydata["PC #"]<- as.double(unlist(ydata["PC #"]))
+colnames(ydata[2]) <- "% Variance Explained"
+colnames(ydata) <-c("PC #", "% Variance Explained")
+
+ydata1=as.data.frame(ydata)
+
+ydata = data.frame(matrix(ncol = 1, nrow = length(pc_results$sdev)))
+ydata[1] <- 100*cumsum((pc_results$sdev^2)/sum((pc_results$sdev^2)))
+ydata <- as.data.frame(tibble::rownames_to_column(ydata,"PC #"))
+ydata["PC #"]<- as.double(unlist(ydata["PC #"]))
+colnames(ydata) <-c("PC #", "% Cumulative Variance Explained")
+
+ydata2=as.data.frame(ydata)
+
+plt1<- ggplot(ydata1) + 
+  geom_line(aes(x = `PC #`, y = `% Variance Explained`), size = 1)
+
+plt2<- ggplot(ydata2) + 
+  geom_line(aes(x = `PC #`, y = `% Cumulative Variance Explained`), size = 1)
+source('multiplot.r')
+multiplot(plt1,plt2, cols = 2)
+
+```
