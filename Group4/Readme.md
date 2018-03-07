@@ -17,12 +17,13 @@ https://www.kaggle.com/zynicide/wine-reviews/downloads/winemag-data-130k-v2.csv/
 
 # Codeboook:
 
-## Business goal
+### Business goal
 The business objective of the presented concept is to provide helpful tools for these retailers to decide in which market should they focus and how to maximize their profits by customizing their selling approach
 Therefore we would like to develop a machine learning model that will be able to:
 1.	estimate the market price of wines price.
 2.	predict which descriptions should be used for wine marketing purposes to maximize potential profit
 
+### Dataset
 | Variable Name | Description | Type | Possible values |
 | ------ | ------ | ------ | ------ |
 |country | Wine origin | character | 48 types. US, france and italy with most review (75%). No NA's but few blanks cells |
