@@ -1,7 +1,7 @@
 ---
 title: "Wine"
 author: "Rotem Zaarour & Dor Heldshtein & Lior Rosen"
-date: "January 2018"
+date: "March 8th, 2018"
 output:
   html_notebook: default
   word_document: default
@@ -217,7 +217,7 @@ cor(clean_train[clean_train$isred == 0,], clean_train[clean_train$isred == 0,])
 
 now let's take a closer look at pairs - for the three main factors (price, points, description length)
 ```{r}
-pairs(clean_train[c(1-4)], col = "blue", cex = 0.5, upper.panel = NULL)
+pairs(clean_train, col = "blue", cex = 0.5, upper.panel = NULL)
 ```
 
 Cheking the correlations of the test data:
@@ -228,7 +228,7 @@ cor(clean_test, clean_test)
 and also the test data pairs as we did for the train data
 
 ```{r}
-pairs(clean_test[c(1-4)], col = "blue", cex = 0.5, upper.panel = NULL)
+pairs(clean_test, col = "blue", cex = 0.5, upper.panel = NULL)
 ```
 
 **checking the test data:**
