@@ -2,9 +2,9 @@
 
 ###### Team naming list
 
-- ![N|Solid](https://avatars2.githubusercontent.com/u/33748704?s=40&v=4) [Rotem Zaarour](https://github.com/rotemzaarour)
-- ![N|Solid]() Dor Heldshtein
-- ![N|Solid](https://avatars0.githubusercontent.com/u/33801999?s=64&v=4) [Lior Rosen](https://github.com/liorrosen) 
+- [Rotem Zaarour](https://github.com/rotemzaarour)
+- Dor Heldshtein
+- [Lior Rosen](https://github.com/liorrosen) 
 
 
 # Wine Reviews Data
