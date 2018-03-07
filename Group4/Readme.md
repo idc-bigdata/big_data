@@ -3,8 +3,8 @@
 ###### Team naming list
 
 - ![N|Solid](https://avatars2.githubusercontent.com/u/33748704?s=40&v=4) [Rotem Zaarour](https://github.com/rotemzaarour)
-- ![N|Solid](https://media.licdn.com/dms/image/C4E03AQEKsoAf-F7pDg/profile-displayphoto-shrink_200_200/0?e=1525575600&v=alpha&t=z_-Jbt91AiIUuN0i1NitURaWVXh5bAyce8i0aJ3Im5E) [Dor Heldshtein](https://www.linkedin.com/in/dor-heldshtein-27bba0a7/?trk=public-profile-join-page)
-- ![N|Solid](https://avatars0.githubusercontent.com/u/33801999?s=460&v=4) [Lior Rosen](https://github.com/liorrosen) 
+- ![N|Solid]() Dor Heldshtein
+- ![N|Solid](https://avatars0.githubusercontent.com/u/33801999?s=64&v=4) [Lior Rosen](https://github.com/liorrosen) 
 
 
 # Wine Reviews Data
