@@ -201,7 +201,7 @@ lets do the same for the test:
 ```{r prepering the test DATA:}
 clean_test = data.frame(points = df.test$points,
                          price = df.test$price,
-                         ratio = df.train$ratio,
+                         ratio = df.test$ratio,
                          desc_nw = (lengths(gregexpr(" ", df.test$description))+1),
                          DnwPpoint = log(lengths(gregexpr(" ", df.test$description))*1)+df.test$points,
                          title_nc = nchar(as.character(df.test$title)),
