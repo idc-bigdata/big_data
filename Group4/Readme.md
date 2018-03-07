@@ -2,7 +2,7 @@
 
 ###### Team naming list
 
-- Rotem Zaarour
+- Rotem Zaarour ![N|Solid](https://avatars2.githubusercontent.com/u/33748704?s=40&v=4)
 - Dor Heldshtein
 - Lior Rosen
 
