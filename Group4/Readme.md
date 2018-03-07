@@ -15,8 +15,9 @@ You can download the data (Zip file) from the link below or [clik here](https://
 https://www.kaggle.com/zynicide/wine-reviews/downloads/winemag-data-130k-v2.csv/4
 
 
-#Codeboook:
-Business goal
+# Codeboook:
+
+## Business goal
 The business objective of the presented concept is to provide helpful tools for these retailers to decide in which market should they focus and how to maximize their profits by customizing their selling approach
 Therefore we would like to develop a machine learning model that will be able to:
 1.	estimate the market price of wines price.
